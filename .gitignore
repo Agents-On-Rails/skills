@@ -1,4 +1,7 @@
+__pycache__/
+*.pyc
+.venv/
+*.bak*
+Thumbs.db
+desktop.ini
 .DS_Store
-*.swp
-.idea/
-.vscode/

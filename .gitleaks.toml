@@ -1,0 +1,49 @@
+# Publish-safety gate, pattern layer (gitleaks 8.x).
+#
+# This is the ONLY file in this repository that spells a public pattern. The README, the
+# scripts and the tests describe these classes in words or build samples from pieces at
+# run time, because every one of them is scanned by this file.
+#
+# Exceptions: none at first ship. If one is ever needed it is a scoped [[allowlists]] entry
+# (description first, then paths / regexes / targetRules), never a content literal, never a
+# .gitleaksignore fingerprint; scripts/publish-gate.ps1 pins the number of entries this file
+# may hold, so widening is a two-file commit confirmed by the maintainer.
+
+title = "Agents-On-Rails skills: publish-safety patterns"
+
+[extend]
+useDefault = true
+
+# A drive-rooted Windows user-profile path, either slash form.
+[[rules]]
+id = "aor-windows-user-path"
+description = "Drive-rooted Windows user-profile path"
+regex = '''(?i)[a-z]:[\\/]+users[\\/]'''
+
+# A POSIX user-home path (macOS or Linux), with a real name after it. Placeholders such as
+# a bracketed name do not match. The captured group deliberately excludes the leading slash:
+# gitleaks' inherited default allowlist drops any secret that begins with a slash-rooted
+# home path, and the capture is what that allowlist is tested against.
+[[rules]]
+id = "aor-posix-user-path"
+description = "POSIX user-home path with a concrete name"
+regex = '''(?:^|[^A-Za-z0-9_.:/-])/((?:Users|home)/[A-Za-z0-9._-]+)'''
+secretGroup = 1
+
+# The name of the corporate file-sync client, which appears only in synced-folder paths.
+[[rules]]
+id = "aor-synced-folder-path"
+description = "Synced-folder path marker"
+regex = '''(?i)onedrive'''
+
+# The Claude Code project-directory slug shape, which encodes a user-profile path.
+[[rules]]
+id = "aor-claude-project-slug"
+description = "Claude Code project-directory slug derived from a user-profile path"
+regex = '''(?i)\b[a-z]--users-'''
+
+# An unresolved AOR template placeholder.
+[[rules]]
+id = "aor-unresolved-placeholder"
+description = "Unresolved AOR template placeholder"
+regex = '''<AOR_'''

@@ -1,0 +1,78 @@
+name: gate
+
+on:
+  push:
+    branches: ['**']
+    tags: ['**']
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  # The publish-safety gate as detection: the same tracked script the local hooks run, with the
+  # private list from the organisation secret. On a fork pull request the secret is withheld, so
+  # the literal layer reports "denylist not loaded" while the pattern and tree layers still report.
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Fetch the pinned scanner
+        shell: pwsh
+        run: |
+          $bin = ./scripts/get-gitleaks.ps1 -Destination "$env:RUNNER_TEMP/gitleaks"
+          "AOR_GITLEAKS=$bin" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Gate
+        shell: pwsh
+        env:
+          AOR_PUBLISH_DENYLIST: ${{ secrets.AOR_PUBLISH_DENYLIST }}
+        run: ./scripts/publish-gate.ps1 -Ci
+
+  # The fixture suite: throwaway repositories, a synthetic list, a predicted set of refusals.
+  gate-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install Claude Code (the installer checks for both root validators)
+        shell: pwsh
+        run: npm install -g @anthropic-ai/claude-code
+      - name: Fetch the pinned scanner
+        shell: pwsh
+        run: |
+          $bin = ./scripts/get-gitleaks.ps1 -Destination "$env:RUNNER_TEMP/gitleaks"
+          "AOR_GITLEAKS=$bin" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Run the suite
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./scripts/tests/test-publish-gate.ps1 -Gitleaks $env:AOR_GITLEAKS
+
+  # The two root validators over the checkout. gh skill publish --dry-run runs only when the tree
+  # carries plugin skills, because it exits non-zero on a tree without any.
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install Claude Code
+        shell: pwsh
+        run: npm install -g @anthropic-ai/claude-code
+      - name: claude plugin validate
+        shell: pwsh
+        run: claude plugin validate .
+      - name: gh skill publish --dry-run
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if (Get-ChildItem -Path plugins -Recurse -Filter SKILL.md -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match '[\\/]plugins[\\/][^\\/]+[\\/]skills[\\/][^\\/]+[\\/]SKILL\.md$' }) {
+            gh skill publish --dry-run
+          } else {
+            Write-Host 'no plugin skills in the tree; gh skill publish --dry-run skipped'
+          }
