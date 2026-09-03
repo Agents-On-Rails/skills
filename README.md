@@ -1,8 +1,8 @@
 # Agents-On-Rails skills
 
 The public home of the `aor-*` agent skills: one repository that users of Claude Code and GitHub
-Copilot CLI add as an install source, with every skill family shipped as a plugin under `plugins/`
-and versioned on its own.
+Copilot CLI add as an install source, and that `gh skill` and `npx skills` install from directly,
+with every skill family shipped as a plugin under `plugins/` and versioned on its own.
 
 The marketplace is named `aor`. One plugin ships today, as a `0.x` preview:
 
@@ -20,14 +20,16 @@ claude plugin install aor-comm@aor
 ```
 
 Inside a session the same two steps are `/plugin marketplace add Agents-On-Rails/skills` and
-`/plugin install aor-comm@aor`. The marketplace is cloned over SSH by default; set
-`CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` to clone over HTTPS. Plugin skills are namespaced, so the skill
-is `/aor-comm:aor-format-teams-message`.
+`/plugin install aor-comm@aor`. The first command clones over SSH, so it needs an SSH key
+registered with GitHub; without one, set `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` first and it clones
+over HTTPS. Plugin skills are namespaced, so the skill is `/aor-comm:aor-format-teams-message`.
 
 Claude Code installs the version named in the plugin's manifest and updates only when that version
 rises. To pick up a new version, run `claude plugin marketplace update aor` and then
 `claude plugin update aor-comm@aor`, and restart. Marketplaces you add yourself do not auto-update
-unless you enable it for them.
+unless you enable it for them. To install a fixed release instead of the latest, add the marketplace
+at its tag before installing: `claude plugin marketplace add Agents-On-Rails/skills@aor-comm--v0.1.0`,
+then `claude plugin install aor-comm@aor`.
 
 ### GitHub Copilot CLI
 
@@ -37,8 +39,7 @@ copilot plugin install aor-comm@aor
 ```
 
 Copilot installs the tree at the tip of `main`, and `copilot plugin update aor-comm@aor` refreshes
-to it whether or not the version has changed. To refresh at session start instead, set
-`autoUpdate: true` on the marketplace's entry in your user settings.
+to it whether or not the version has changed.
 
 ### gh skill
 
@@ -48,14 +49,18 @@ gh skill install Agents-On-Rails/skills aor-format-teams-message
 
 Installs the skill under its bare name for the agent you choose (`--agent`, `--scope`), from the tip
 of `main` while this repository has no full GitHub Release. `gh skill update --all` refreshes it.
+To install a release, pin it: `--pin aor-comm--v0.1.0`, or name it as
+`aor-format-teams-message@aor-comm--v0.1.0`; a pinned install is left alone by `gh skill update`
+until `--unpin`.
 
 ### npx skills
 
 ```
-npx skills add Agents-On-Rails/skills
+npx skills add Agents-On-Rails/skills --skill aor-format-teams-message
 ```
 
-Follows the marketplace entries.
+Follows the marketplace entries; `npx skills add Agents-On-Rails/skills --list` shows them, and
+`-a <agent> -y` runs without prompts.
 
 ## Versions and releases
 
