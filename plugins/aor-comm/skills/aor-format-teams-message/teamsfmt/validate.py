@@ -6,8 +6,10 @@ the manifest means an unsupported element cannot reach the clipboard even if a b
 or a future edit introduces one -- the failure mode is a refusal, not a message that
 looks wrong after you have already pasted and sent it.
 
-Because it reads the same file SKILL.md documents, the enforced set and the
-documented set cannot drift apart.
+It reads the same file SKILL.md documents, so the two share one source of truth --
+but they can still drift, and have: an earlier version of this docstring claimed they
+could not, while SKILL.md had already drifted from the manifest. See the note at the
+top of capabilities.json, and _IMPLIED below for the second drift channel.
 """
 
 from __future__ import annotations

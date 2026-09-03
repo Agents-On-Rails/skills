@@ -60,8 +60,10 @@ from dataclasses import dataclass
 # LOWER BOUND on what Teams accepts, not a ceiling and not a cap: nothing here refuses
 # a byte count. It is the threshold for an advisory note, so that a draft venturing
 # past the evidence says so. Raise it only when a larger payload has actually been
-# observed arriving intact AT A RECIPIENT -- the sending client cannot establish that
-# (see FINDINGS.md and claim c-gbt1).
+# observed arriving intact AT A RECIPIENT. The sending client cannot establish that:
+# copying a sent message from the client that sent it can hand back that client's own
+# blob: URL, which is a session-local object reference and proves no network transfer,
+# no upload and no persistence. Confirm from a different client or session.
 VERIFIED_IMAGE_BYTES = 8_830_000
 
 _DATA_URI = re.compile(r"^data:([a-z]+/[a-z0-9.+-]+)?(;base64)?,(.*)$", re.I | re.S)

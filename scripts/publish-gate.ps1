@@ -1028,6 +1028,13 @@ function Invoke-PrePush {
       else { Write-Gate "${label}: branch deletion; nothing to scan" }
       continue
     }
+    # A tag the remote already carries at another commit is a published release being moved. Deleting
+    # one is refused just above; moving one is the same act with the same consequence for anyone who
+    # pinned it, so it is refused on the same terms.
+    if ($isTag -and $remoteSha -notmatch '^0+$' -and $remoteSha -ne $localSha) {
+      if ($script:IncidentMode) { Write-Gate "${label}: published tag moved; permitted in INCIDENT MODE" }
+      else { Add-Failure "${label}: tag is already published at another commit; moving a published tag is refused outside INCIDENT MODE"; continue }
+    }
     $tipCommit = (Invoke-Git -Arguments @('-C', $top, 'rev-parse', '--verify', "$localSha^{commit}")).StdOut.Trim()
     $tipTree = (Invoke-Git -Arguments @('-C', $top, 'rev-parse', '--verify', "$tipCommit^{tree}")).StdOut.Trim()
     if ($null -eq $configTree) { $configTree = $tipTree }

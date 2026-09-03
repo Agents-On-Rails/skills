@@ -340,9 +340,11 @@ def _note_if_past_the_evidence(images: list) -> None:
     observation. Nothing else here can. Image quality is size-invariant on this
     surface -- Teams re-encodes to roughly 800 px whatever you send -- so a size
     problem reaches a human as "Teams is slow" or "the paste was flaky", and the
-    sending client provably cannot see what a recipient got (claim c-gbt1). So the
-    one honest signal available is: you have left the evidenced band, and if this
-    message misbehaves for someone else, start here.
+    sending client provably cannot see what a recipient got -- copying a sent
+    message from the sending client can return that client's own session-local
+    blob: reference, which establishes nothing about delivery. So the one honest
+    signal available is: you have left the evidenced band, and if this message
+    misbehaves for someone else, start here.
     """
     if not images:
         return

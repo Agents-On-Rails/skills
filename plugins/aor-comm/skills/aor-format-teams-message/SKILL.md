@@ -2,7 +2,7 @@
 name: aor-format-teams-message
 description: Draft a rich, nicely formatted Microsoft Teams message and put it on the clipboard ready to paste with a single Ctrl+V. Teams supports far more formatting than it appears to - headings, nested bullets, numbered lists, tables, code blocks, quotes, colour, highlight and inline images all survive a paste. Use whenever the user asks to draft, write, format or prepare a Teams message, chat update, status post or announcement; asks to "format this for Teams"; asks to put a screenshot, diagram, chart or image into a Teams message; or asks to copy something to the clipboard for pasting into Teams. It prepares the clipboard only - it never sends a message, uploads a file or attaches anything.
 license: MIT
-compatibility: "Windows only. Writes CF_HTML to the Win32 clipboard through ctypes; needs Python 3.9 or later on PATH as python, standard library only. Paste target is Microsoft Teams desktop or Teams web in a Chromium browser."
+compatibility: "Windows only. Writes CF_HTML to the Win32 clipboard through ctypes; needs Python 3.9 or later on PATH as python, standard library only. Paste target is Microsoft Teams desktop or Teams web; the vocabulary was verified against Teams web in Edge and Teams desktop on Windows 11 (verified_client in capabilities.json), and other Chromium browsers were not probed."
 ---
 
 # Format a Teams message
@@ -148,14 +148,17 @@ so if the user has not seen the image, say which file it came from.
    python <skill-folder>/md2teams.py <draft.md>
    ```
 
-   Exit 0 means the clipboard holds the message. Exit 1 means the draft was refused —
+   Exit 0 means the draft was accepted and the clipboard write returned success; the
+   self-check proves the CF_HTML framing is self-consistent, not that the write landed
+   intact, so a paste is still the real confirmation. Exit 1 means the draft was refused —
    read the named problems, fix the Markdown, run again. Do not work around a refusal by
    removing the formatting wholesale; the message names a specific fixable construct.
 
    Useful flags: `--print` renders to stdout without touching the clipboard (good for
    showing the user what they will get); `--tight` drops the blank-line spacers between
    blocks; `--image NAME=PATH` binds an image file (repeatable, see "Images");
-   `--capabilities` prints this vocabulary from the manifest.
+   `--capabilities` prints this vocabulary, with the verification dates, gotchas and
+   untested items read from the manifest.
 
 4. **Tell the user it is ready to paste** with Ctrl+V, in one short line.
 

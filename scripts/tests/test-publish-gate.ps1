@@ -549,6 +549,17 @@ Invoke-Case 'pp-tag-ok' {
   [void](Git $B @('tag', 'aor-t--v0.2.0'))
   [void](Expect-PushAccepted $B @('refs/tags/aor-t--v0.2.0'))
 }
+Invoke-Case 'pp-tag-move-published' {
+  # The tag pp-tag-ok pushed is published. Moving it is the same act as deleting it for anyone who
+  # pinned it, so it is refused on the same terms. The new commit leaves plugins/ alone, so the tag
+  # still matches the manifest version there and the refusal can only be the published-tag rule.
+  Write-File $B 'scripts/after-tag.md' "landed after the tag`n"
+  [void](Expect-CommitAccepted $B)
+  [void](Expect-PushAccepted $B @('main'))
+  [void](Git $B @('tag', '-f', 'aor-t--v0.2.0'))
+  [void](Expect-PushRefused $B @('refs/tags/aor-t--v0.2.0') @('tag is already published at another commit') -Force)
+  [void](Expect-PushAccepted $B @('refs/tags/aor-t--v0.2.0') @('INCIDENT MODE', 'published tag moved; permitted in INCIDENT MODE') @{ AOR_GATE_INCIDENT = '1' } -Force)
+}
 Invoke-Case 'pp-tag-annotated-ok' {
   [void](Git $B @('tag', '-a', '-m', 'annotated', 'aor-t--v0.2.0-anno'))
   # the name carries a prerelease suffix that does not match the manifest, so it must fail on version, not on shape
