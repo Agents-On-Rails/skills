@@ -52,7 +52,9 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: ./scripts/tests/test-publish-gate.ps1 -Gitleaks $env:AOR_GITLEAKS
+        run: |
+          "pwsh $($PSVersionTable.PSVersion)"; git --version
+          ./scripts/tests/test-publish-gate.ps1 -Gitleaks $env:AOR_GITLEAKS
 
   # The two root validators over the checkout. gh skill publish --dry-run runs only when the tree
   # carries plugin skills, because it exits non-zero on a tree without any.

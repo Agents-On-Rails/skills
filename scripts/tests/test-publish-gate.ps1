@@ -157,7 +157,7 @@ function New-Fixture([switch]$SkipInstall, [string]$OriginUrl = $null, [string]$
   $dir = Join-Path $script:Root ("f{0:d2}" -f $script:FixtureCount)
   $work = Join-Path $dir 'w'; $bare = Join-Path $dir 'r.git'
   New-Item -ItemType Directory -Path $work | Out-Null
-  $r = Invoke-Proc 'git' @('init', '-q', '--bare', $bare); if ($r.ExitCode -ne 0) { throw 'git init --bare failed' }
+  $r = Invoke-Proc 'git' @('init', '-q', '--bare', '-b', 'main', $bare); if ($r.ExitCode -ne 0) { throw 'git init --bare failed' }
   $r = Invoke-Proc 'git' @('init', '-q', '-b', 'main', $work); if ($r.ExitCode -ne 0) { throw 'git init failed' }
   $fx = [pscustomobject]@{ Work = $work; Bare = $bare; Dir = $dir }
   [void](Git $fx @('config', 'user.name', 'fixture'))
@@ -228,11 +228,14 @@ Invoke-Case 'pc-literal-filename' {
   Write-File $A "scripts/$($script:List[0])-note.md" "clean`n"
   [void](Expect-CommitRefused $A @('listed identifier in 1 file name(s)', 'names are withheld'))
 }
+# Plain script blocks: Invoke-Case runs each one synchronously, so $id is the current key. A closure
+# (GetNewClosure) would not see this script's functions when the suite is invoked with call semantics,
+# which is how GitHub's pwsh shell runs a step.
 foreach ($id in $samples.Keys) {
   Invoke-Case "pc-pattern-$id" {
     Write-File $A 'scripts/p.md' "text $($samples[$id]) end`n"
     [void](Expect-CommitRefused $A @("pattern $id (default+own)", "pattern $id (own-only)", 'scripts/p.md'))
-  }.GetNewClosure()
+  }
 }
 Invoke-Case 'pc-pattern-placeholder-name-does-not-match' {
   Write-File $A 'scripts/p.md' ("stored under /" + 'ho' + 'me/<user>/x and https://api.github.com/users/octocat' + "`n")
@@ -295,7 +298,7 @@ Invoke-Case 'pc-plugin-dir-name' {
 }
 Invoke-Case 'pc-marketplace-missing' {
   Add-Plugin $A
-  Remove-Item -LiteralPath (Join-Path $A.Work '.claude-plugin' 'marketplace.json')
+  Remove-Item -Force -LiteralPath (Join-Path $A.Work '.claude-plugin' 'marketplace.json')
   [void](Expect-CommitRefused $A @('marketplace.json is required when plugins/ exists'))
 }
 Invoke-Case 'pc-marketplace-count' {
@@ -382,7 +385,7 @@ Invoke-Case 'pc-config-missing-rule' {
   [void](Expect-CommitRefused $A @('lacks rule(s) the gate expects: aor-synced-folder-path', 'no control sample for: aor-renamed', 'positive control failed'))
 }
 Invoke-Case 'pc-config-removed' {
-  Remove-Item -LiteralPath (Join-Path $A.Work '.gitleaks.toml')
+  Remove-Item -Force -LiteralPath (Join-Path $A.Work '.gitleaks.toml')
   [void](Expect-CommitRefused $A @('.gitleaks.toml is missing from the staged tree'))
 }
 Invoke-Case 'pc-hash-mismatch' {
@@ -494,7 +497,7 @@ Invoke-Case 'pp-literal-in-history-tip-clean' {
   Write-File $B 'scripts/a.md' "see $($script:List[1])`n"
   $c = Commit $B 'bad' -NoVerify
   Assert-True ($c.ExitCode -eq 0) '--no-verify commit'
-  Remove-Item -LiteralPath (Join-Path $B.Work 'scripts' 'a.md')
+  Remove-Item -Force -LiteralPath (Join-Path $B.Work 'scripts' 'a.md')
   $c2 = Commit $B 'remove again'
   Assert-True ($c2.ExitCode -eq 0) 'tip is clean'
   $r = Expect-PushRefused $B @('main') @('listed identifier in content in ', 'scripts/a.md', '2 commit(s) in range')
@@ -503,7 +506,7 @@ Invoke-Case 'pp-literal-in-history-tip-clean' {
 Invoke-Case 'pp-pattern-in-history-tip-clean' {
   Write-File $B 'scripts/a.md' "x $($samples['aor-windows-user-path']) y`n"
   [void](Commit $B 'bad' -NoVerify)
-  Remove-Item -LiteralPath (Join-Path $B.Work 'scripts' 'a.md')
+  Remove-Item -Force -LiteralPath (Join-Path $B.Work 'scripts' 'a.md')
   [void](Commit $B 'remove again')
   [void](Expect-PushRefused $B @('main') @('pattern aor-windows-user-path (default+own) in ', 'scripts/a.md'))
   Reset-ToRemote $B
@@ -648,7 +651,7 @@ Invoke-Case 'ci-range-with-literal-in-middle-commit' {
   $before = (Git $C @('rev-parse', 'HEAD')).Output.Trim()
   Write-File $C 'scripts/a.md' "see $($script:List[0])`n"
   [void](Commit $C 'bad' -NoVerify)
-  Remove-Item -LiteralPath (Join-Path $C.Work 'scripts' 'a.md')
+  Remove-Item -Force -LiteralPath (Join-Path $C.Work 'scripts' 'a.md')
   [void](Commit $C 'clean tip')
   $r = Invoke-CiGate $C 'push' 'refs/heads/main' @{ before = $before; created = $false; forced = $false } $ciList
   Assert-True ($r.ExitCode -ne 0) 'should fail'
@@ -890,7 +893,7 @@ Invoke-Case 'pp-pattern-in-commit-message' {
 Invoke-Case 'pp-range-interior-binary' {
   Write-Bytes $B 'scripts/x.pyc' ([byte[]](0..255))
   [void](Commit $B 'binary' -NoVerify)
-  Remove-Item -LiteralPath (Join-Path $B.Work 'scripts' 'x.pyc')
+  Remove-Item -Force -LiteralPath (Join-Path $B.Work 'scripts' 'x.pyc')
   [void](Commit $B 'removed again')
   $r = Expect-PushRefused $B @('main') @('binary file: scripts/x.pyc')
   Assert-Contains $r.Output ' tree: binary file'
@@ -899,7 +902,7 @@ Invoke-Case 'pp-range-interior-binary' {
 Invoke-Case 'ci-created-listed-name-in-history' {
   Write-File $C "scripts/$($script:List[0]).md" "x`n"
   [void](Commit $C 'named' -NoVerify)
-  Remove-Item -LiteralPath (Join-Path $C.Work 'scripts' "$($script:List[0]).md")
+  Remove-Item -Force -LiteralPath (Join-Path $C.Work 'scripts' "$($script:List[0]).md")
   [void](Commit $C 'removed')
   $r = Invoke-CiGate $C 'push' 'refs/heads/main' @{ before = '0000000000000000000000000000000000000000'; created = $true; forced = $false } $ciList
   Assert-True ($r.ExitCode -ne 0) 'should fail on the historical file name'

@@ -60,7 +60,7 @@ contains a listed identifier is reported only as a count, and the name is withhe
 
 ### Setting up a clone (maintainers)
 
-1. Have PowerShell 7 (`pwsh`), git, the GitHub CLI (`gh`, signed in) and Claude Code on PATH.
+1. Have PowerShell 7 (`pwsh`), git 2.28 or later, the GitHub CLI (`gh`, signed in) and Claude Code (a native install or the npm package) on PATH.
 2. Write the identifier list by hand, outside every repository: one identifier per line, `#`
    comment lines allowed, UTF-8. The default location is `~/.aor/publish-denylist.txt`.
 3. Fetch the pinned scanner: `pwsh scripts/get-gitleaks.ps1`. It verifies the download against

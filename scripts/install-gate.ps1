@@ -94,7 +94,7 @@ $v = Invoke-Proc 'pwsh' @('-NoProfile', '-NonInteractive', '-File', $gate, '-Ver
 if ($v.ExitCode -ne 0) { Abort "gitleaks at $Gitleaks does not hash to the pinned release (run scripts/get-gitleaks.ps1)" }
 Step 'guard: gitleaks hash matches the pin'
 
-foreach ($tool in 'pwsh', 'claude', 'gh') { if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) { Abort "$tool is not on PATH; the hooks and the pre-push validators need it" } }
+foreach ($tool in 'pwsh', 'claude', 'gh') { if (-not (Get-Command $tool -CommandType Application -ErrorAction SilentlyContinue)) { Abort "$tool is not on PATH; the hooks and the pre-push validators need it" } }
 Step 'guard: pwsh, claude and gh are on PATH'
 
 $h = Invoke-Proc 'git' @('-C', $top, 'config', '--get', 'core.hooksPath')

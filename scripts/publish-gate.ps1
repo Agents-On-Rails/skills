@@ -140,8 +140,21 @@ function Invoke-Native {
     [hashtable]$Environment = $null
   )
   $psi = [System.Diagnostics.ProcessStartInfo]::new()
-  $psi.FileName = $Exe
-  foreach ($a in $Arguments) { $psi.ArgumentList.Add($a) }
+  # On Windows an npm-installed validator is a .cmd shim, which CreateProcess cannot start by bare name.
+  # Only the two validators may take the command-interpreter path, and only with shell-safe arguments:
+  # cmd.exe interprets metacharacters, so git and pwsh (repository-derived arguments) never go through it.
+  $file = $Exe
+  $argv = @($Arguments)
+  if ($IsWindows -and $Exe -in @('claude', 'gh')) {
+    $app = Get-Command -Name $Exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($null -ne $app -and $app.Source -match '\.(cmd|bat)$') {
+      foreach ($a in $argv) { if ($a -match '[\s"&|<>^%!()]') { throw "refusing to pass an argument with shell metacharacters to $Exe through the command interpreter" } }
+      $file = $env:ComSpec
+      $argv = @('/d', '/c', $app.Source) + $argv
+    }
+  }
+  $psi.FileName = $file
+  foreach ($a in $argv) { $psi.ArgumentList.Add($a) }
   $psi.UseShellExecute = $false
   $psi.RedirectStandardInput = $true
   $psi.RedirectStandardOutput = $true
