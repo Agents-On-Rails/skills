@@ -4,13 +4,69 @@ The public home of the `aor-*` agent skills: one repository that users of Claude
 Copilot CLI add as an install source, with every skill family shipped as a plugin under `plugins/`
 and versioned on its own.
 
-**No plugin is published yet.** The first family arrives as a `0.x` preview, and the install
-instructions arrive with it. Until then this repository carries the publish-safety gate described
-below and the parked first-generation skills under `legacy/`.
+The marketplace is named `aor`. One plugin ships today, as a `0.x` preview:
+
+| Plugin | Version | Skills | Needs |
+|---|---|---|---|
+| `aor-comm` | 0.1.0 | `aor-format-teams-message`: drafts a rich Microsoft Teams message and puts it on the clipboard ready to paste | Windows; Python 3.9 or later on PATH as `python` |
+
+## Install
+
+### Claude Code
+
+```
+claude plugin marketplace add Agents-On-Rails/skills
+claude plugin install aor-comm@aor
+```
+
+Inside a session the same two steps are `/plugin marketplace add Agents-On-Rails/skills` and
+`/plugin install aor-comm@aor`. The marketplace is cloned over SSH by default; set
+`CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` to clone over HTTPS. Plugin skills are namespaced, so the skill
+is `/aor-comm:aor-format-teams-message`.
+
+Claude Code installs the version named in the plugin's manifest and updates only when that version
+rises. To pick up a new version, run `claude plugin marketplace update aor` and then
+`claude plugin update aor-comm@aor`, and restart. Marketplaces you add yourself do not auto-update
+unless you enable it for them.
+
+### GitHub Copilot CLI
+
+```
+copilot plugin marketplace add Agents-On-Rails/skills
+copilot plugin install aor-comm@aor
+```
+
+Copilot installs the tree at the tip of `main`, and `copilot plugin update aor-comm@aor` refreshes
+to it whether or not the version has changed. To refresh at session start instead, set
+`autoUpdate: true` on the marketplace's entry in your user settings.
+
+### gh skill
+
+```
+gh skill install Agents-On-Rails/skills aor-format-teams-message
+```
+
+Installs the skill under its bare name for the agent you choose (`--agent`, `--scope`), from the tip
+of `main` while this repository has no full GitHub Release. `gh skill update --all` refreshes it.
+
+### npx skills
+
+```
+npx skills add Agents-On-Rails/skills
+```
+
+Follows the marketplace entries.
+
+## Versions and releases
+
+Each plugin carries one `version`, in its `plugin.json`, and every push that changes a plugin raises
+it. A release is that version plus the tag `<plugin>--v<version>` (`aor-comm--v0.1.0`), pushed
+together. While a plugin is `0.x`, its releases are tags only; a GitHub Release, if any, is marked
+as a prerelease.
 
 ## Layout
 
-- `plugins/aor-<family>/` will hold one plugin per skill family, each with its own
+- `plugins/aor-<family>/` holds one plugin per skill family, each with its own
   `.claude-plugin/plugin.json` and `skills/<name>/SKILL.md`; the marketplace manifest at
   `.claude-plugin/marketplace.json` lists them.
 - `legacy/<skill>/` holds the first-generation requirements skills (`aor-req`, `aor-test-trace`,

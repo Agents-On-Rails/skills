@@ -1,0 +1,144 @@
+{
+  "$comment": [
+    "Single source of truth for what Microsoft Teams accepts on the CLIPBOARD PASTE surface.",
+    "SKILL.md documents this vocabulary and md2teams.py enforces it. Do NOT read that as 'they cannot drift' -- an earlier version of this line said exactly that and was wrong: SKILL.md had already drifted (it asserted h4-h6 'do not exist in Teams' while this file listed them as unprobed). A maintainers' test (test_manifest_matches_evidence.py, kept with the round-trip evidence and not shipped) checks SOME of the coupling, not all of it.",
+    "",
+    "Every 'verified' entry below was established by a live round trip on the stated date:",
+    "CF_HTML clipboard -> paste into the Teams compose box -> send -> read back the rendered",
+    "message HTML. Two corpora: probe/corpus.json drives the scripted WEB run; the manual",
+    "DESKTOP run uses probe/desktop-probe*.md|html (see 'reprobe'). Nothing here is documentation:",
+    "Microsoft publishes no allowlist for this surface, and the tables that do exist describe",
+    "the Graph/bot surface, which demonstrably differs (it rejects hr and table; paste accepts",
+    "both).",
+    "",
+    "To re-verify after Teams changes: see 'reprobe' at the bottom of this file."
+  ],
+  "schema_version": 1,
+  "surface": "teams-compose-clipboard-paste",
+  "verified_on": "2026-07-29",
+  "verified_on_means": "The date of the last FULL re-probe of the vocabulary against a live client -- NOT the date of the newest evidence of any kind (operator decision 2026-07-30). Narrow probes that close a single open item deliberately do NOT move it: a one-construct run must not reset the freshness clock on the 19 constructs nobody re-checked. So this field reading older than some notes below is correct, not stale. Session-4 evidence dated 2026-07-30 (image ingest timing, size/format, recipient delivery) sits under 'gotchas' and 'untested' with its own dates.",
+  "verified_client": "Teams web (teams.microsoft.com/v2) in Edge, and Teams desktop (MSTeams MSIX 26183.1903.4892.4448, WebView2 150.0.4078.99) -- both on Windows 11. Kept as a single string: md2teams.py interpolates it directly into --capabilities.",
+  "editor": {
+    "engine": "CKEditor 5",
+    "evidence": "compose box carries data-tid=\"ckeditor\" and classes ck ck-content ck-editor__editable (observed on the live DOM 2026-07-28)",
+    "mechanism": "Probably: CKEditor filters pasted content against its loaded feature set rather than running a generic HTML sanitizer, so anything no feature claims is dropped -- which would explain why <div> disappears while <b> survives.",
+    "mechanism_grade": "model-inferred -- NOT verified. CKEditor's clipboard/schema/upcast docs do not state what happens to an element with no converter; the closest support is the General HTML Support page describing GHS as letting you 'create a list of markup tags that the editor will not strip'. The supported/rejected sets below rest on the round-trip observations, not on this explanation."
+  },
+
+  "supported": {
+    "p": { "note": "Paragraph. Blank spacer line is <p>&nbsp;</p>." },
+    "br": { "note": "Hard line break inside a paragraph." },
+    "strong": { "note": "Bold. <b> is accepted and normalized to <strong>." },
+    "i": { "note": "Italic. <em> is accepted and normalized to <i>." },
+    "u": { "note": "Underline." },
+    "s": { "note": "Strikethrough. <strike> is accepted and normalized to <s>." },
+    "code": { "note": "Inline code. Teams adds class=\"skipProofing\"." },
+    "a": {
+      "attrs": ["href"],
+      "note": "Teams rewrites the element with its own safelink attributes (data-testid=\"atp-safelink\", rel, target, id). Emit only href."
+    },
+    "h1": {}, "h2": {}, "h3": {},
+    "ul": { "note": "Nesting verified to depth 3 (desktop, 2026-07-29). The renderer applies no depth cap." },
+    "ol": { "note": "Nested <ol> verified to depth 3 (desktop, 2026-07-29)." },
+    "li": {
+      "note": "An item MAY wrap across several source lines. A following line carrying no list marker JOINS the item above it and is emitted as <br> -- the same meaning a newline already has inside a paragraph. A line that carries a marker is an item (nested or sibling, by indent), a blank line ends the list, and a line starting any other block (heading, rule, quote, fence, table) ends it too. Converter semantics, not a Teams fact. Before 2026-07-29 a wrapped item degraded SILENTLY: the continuation escaped into its own <p>, the list split in two with the next item restarting at 1, and emphasis spanning the wrap leaked as literal asterisks -- exit 0, onto the clipboard."
+    },
+    "blockquote": {},
+    "pre": {
+      "note": "Emit <pre><code>...</code></pre> with REAL newlines and space indentation. CKEditor normalizes this to Teams' own <br> + &nbsp; shape on paste; hand-writing that shape is unnecessary. Teams adds class=\"language-plaintext\" and an itemid UUID itself."
+    },
+    "hr": { "note": "Survives paste and send, despite the bot-surface documentation marking horizontal rules unsupported." },
+    "table": {
+      "children": ["tbody", "tr", "td", "th"],
+      "note": "Survives paste and send, despite the bot-surface documentation marking tables unsupported. Teams wraps the result in <figure class=\"table\">. th, colspan and rowspan all verified on desktop 2026-07-29; Teams adds its own <thead> around a pasted header row, so emit <tbody> only and let it normalise. NOTE: this children list is documentation -- validate.py enforces its own _IMPLIED set, so changing this alone changes nothing."
+    },
+    "img": {
+      "attrs": ["src", "alt"],
+      "note": "The EMITTED src is always a data: URI -- an http(s) src makes Teams reject the ENTIRE paste. Verified end-to-end on desktop 2026-07-29 and confirmed to survive a send (visible in Teams web from a separate session). Two ways for a draft to supply the bytes, and BOTH keep file selection on argv: (a) the caller inlines the base64 itself, or (b) the operator binds a file with --image NAME=PATH and the draft writes src=\"name:NAME\", which md2teams.py resolves through a dict built from argv. A name matches ^[A-Za-z0-9_-]{1,64}$ and is never joined onto a directory, so the draft grammar still contains no path syntax and traversal/UNC paths are unexpressible rather than blocked. A name: src never reaches this validator -- the renderer has already resolved it to data:. Bytes are re-emitted from an allowlist of structural chunks, so EXIF/XMP/PNG text metadata -- including pre-crop thumbnails -- cannot ride along. PNG and JPEG only, mime taken from magic bytes. NO size cap: a 2 MB policy cap was removed on 2026-07-30 by operator decision, on the reasoning that it guarded nothing and that limits should be fitted to observed problems rather than guessed. What replaced it is an advisory stderr NOTE above the largest end-to-end verified payload (VERIFIED_IMAGE_BYTES in teamsfmt/images.py) -- never a refusal.",
+      "teams_rewrites_it": "Teams ingests the bytes and substitutes its own: the read-back carries src=\"data:image/jpeg;base64,...\" -- a RE-ENCODED preview, our 12x12 PNG came back as a 12x12 JPEG and grew from 80 to 633 bytes -- plus target-src=\"blob:https://teams.microsoft.com/<uuid>\", inside a span with itemtype=http://schema.skype.com/AMSImage. alt is preserved and mirrored to aria-label. The recipient receives Teams' copy, not the bytes you sent. (Corrected 2026-07-29: an earlier version said 'src becomes blob:'. It does not -- that reading came from a regex without a word boundary matching inside target-src.)"
+    },
+    "span": {
+      "attrs": ["style"],
+      "style_properties": ["color", "background-color"],
+      "note": "IMPORTANT: the colour VALUE is not preserved. Teams snaps it to its own palette -- rgb(196,49,75) came back as rgb(182,66,76), and rgb(255,241,0) as rgb(229,241,143). Treat colour as 'roughly this hue', never as exact branding.",
+      "highlight_style": "==highlight== emits background-color: #FFF1A8 AND color: #242424, from HIGHLIGHT_STYLE in teamsfmt/render.py. Converter policy, not a Teams fact. The background value is arbitrary and admitted so -- it was chosen without rationale and Teams snaps it anyway, which is exactly why it does not matter. The FOREGROUND is the load-bearing half and is not arbitrary: emitting a light background while leaving the text colour to the client means a dark theme inheriting white text renders white-on-pale-yellow at roughly 1.14:1 contrast -- an unreadable bar, invisible to the sender, which is the silent-degradation failure this tool exists to prevent. No dark-theme client has ever been probed here (verified_client records none), so pinning both properties removes the dependency instead of resting on an untested assumption. Operator decision 2026-07-30. If you change either value, change it HERE first and re-run the offline suite -- a test pins the emitted pair."
+    }
+  },
+
+  "text": {
+    "unicode": "Emoji, arrows, dashes and Danish characters pass through byte-exact. Emit literal characters, never HTML entities.",
+    "verified_sample": "Rødgrød med fløde — søde æbler → ØL · 🤖 ✅ 🚀 · ⇒ ✓"
+  },
+
+  "rejected": {
+    "div": "Confirmed stripped by design. Microsoft: 'Teams Desktop/Web client has implemented new guidelines on what HTML elements and styling is allowed' (Meghana-MSFT, 2025-02-20). Never emit.",
+    "style_other_than_colour": "display, padding, border, border-radius are stripped -- so boxed/callout styling is impossible. Community-reported and consistent with the Graph note that inline styles 'may not function as intended'.",
+    "h4_h6": "Teams silently DOWNGRADES h4-h6 to h3 (desktop, 2026-07-29): the text survives, the heading level is lost. Refused because a silent downgrade is exactly what this tool exists not to do. Note this is a different failure MODE from the stripped entries above. A heading may carry leading whitespace as of 2026-07-30, and making it so also closed a hole in THIS refusal: an indented '  #### x' previously matched no heading pattern at all, so it became literal text at exit 0 instead of being refused -- the indent was a way around the guarantee.",
+    "img_external_url": "An <img> with an http(s) src makes Teams REJECT THE ENTIRE PASTE with the UI error 'Cannot paste this image. Try different source.' (desktop, 2026-07-29). Not stripped -- the whole message is blocked, and the tool cannot detect it, because nothing here observes Teams. Use a data: URI instead.",
+    "img_markdown_syntax": "![alt](src) is refused so an image is always written as <img>. Until 2026-07-29 it silently rendered as a literal '!' plus a hyperlink to a path the recipient cannot open.",
+    "img_unbound_name": "<img src=\"name:X\"> where no --image X=PATH was given on the command line is refused, not skipped. So is an --image binding the draft never references: a bound-but-unused image is a silently missing image, which is the failure this tool exists to prevent.",
+    "img_network_path": "--image NAME=PATH refuses a UNC or network path (\\\\host\\share\\x.png, //host/share/x.png, \\\\?\\UNC\\...), before anything opens it. On Windows the stat() call IS the SMB handshake that offers this machine's NTLM credentials to whoever answers, so catching an error afterwards would be too late to be a safeguard. Extended-length local paths (\\\\?\\C:\\...) stay usable. Operator decision 2026-07-29: close it structurally rather than rely on argv being host-gated.",
+    "at_and_emoji": "A paste CANNOT create a real mention: <at> is stripped to inert plain text and <emoji> vanishes entirely, element and content (desktop, 2026-07-29). Mentions need an entity payload the clipboard does not carry."
+  },
+
+  "untested": [
+    "Teams' true image size ceiling. 8.83 MB was ACCEPTED end to end (probe 14: paste and send both fine, PNG), and the ceiling was never reached, so that figure is a LOWER BOUND and not a limit. As of 2026-07-30 this tool imposes no cap of its own, so a draft can now go past the evidenced band; VERIFIED_IMAGE_BYTES is the threshold for an advisory note, not a refusal. Anything above it is unevidenced in BOTH directions -- never observed rejected, never observed accepted.",
+    "formats beyond PNG/JPEG/GIF. A data: URI GIF was accepted by Teams (probe 14); WebP and SVG were not probed. Our converter refuses everything except PNG and JPEG regardless, because those are the only formats it can strip metadata from -- that refusal is our policy, not a Teams behaviour."
+  ],
+
+  "gotchas": {
+    "send_after_code_block": "A message whose LAST block is a code block cannot be sent with Enter: the caret sits inside the <pre> and Enter inserts a newline. End such a message with a short closing line, or click the send button.",
+    "colour_is_approximate": "See span note above.",
+    "clipboard_is_ambient": "The clipboard is machine-wide. Anything running between setting it and pasting can overwrite it. Verify in the same process that sets it, never in a later one.",
+    "h4_h6_downgrade": "h4-h6 are not rejected by Teams, they are silently clamped to h3. Invisible in a paste-only capture unless you diff heading levels.",
+    "external_image_kills_the_whole_paste": "An external-URL <img> does not lose the image, it blocks the entire message. Probe images in their OWN fragment or the failure masks every other construct in the same paste.",
+    "ingest_fires_at_send_not_at_paste": "The upload happens at SEND. Measured on the wire 2026-07-30 (probe/13-image-ingest-timing.mjs): across 539 requests covering the paste and a 30-second dwell, nothing touched the AMS object store; 0.8 s AFTER Enter came POST /v1/objects/ followed by PUT /v1/objects/<id>/content/imgpsh. A draft composed and then abandoned therefore does NOT leave the machine. Read this off the ENDPOINTS, not off body sizes: Playwright reported the actual upload PUT as 0 bytes, so request-body size is a blind instrument on this surface and must not be used to argue that nothing was sent.",
+    "teams_downscales_to_about_800px": "Teams re-encodes a pasted image down to roughly 800 px on the longest side. Sources of 840, 1180 and 1670 px all came back decoding at 800x800, while 600 px and 384 px sources were left alone (probes 14 and 15, 2026-07-30). Pasting a high-resolution screenshot therefore buys nothing. CONFIRMED AT A RECIPIENT 2026-07-30, by a resolution test pattern rather than by asking for pixel measurements: a 1600 px image carrying stripe pairs of 1, 2, 4 and 8 px was checked on a recipient's own client, where the finest (1 px) pair read as very nearly solid while the coarser pairs still read as striped -- precisely the outcome a 2x reduction produces, since 1 px pairs land at half a pixel. What this does NOT separate is storage from display: the recipient sees a total scale factor, so stored-at-800 and stored-at-1600-displayed-at-800 are indistinguishable from there. The conclusion that survives either reading, and the one that matters for drafting: a recipient sees no MORE degradation than the sender does, and detail finer than about 2 px at 800 px wide is gone.",
+    "images_do_reach_a_recipient": "An inline data: URI image survives paste, send, ingest and delivery, and renders for a different person on their own client (confirmed 2026-07-30 at a recipient on a separate account, checked from that account rather than from the sending client). Worth stating explicitly because every earlier check had been made from the SENDING client, where a local blob cache makes the image render whether or not anything ever left the machine.",
+    "alt_at_a_recipient_is_unverified_and_will_stay_that_way": "<img alt> survives the INGEST -- alt and aria-label are both present in the desktop read-back -- but that read-back came from the SENDING client, and the sending side can never evidence what a recipient sees (probe/15-fresh-readback.mjs: even a fresh browser process re-renders from a local blob cache with ZERO object-store fetches). Only a recipient's own client could settle it. Operator decision 2026-07-30: CLOSED AS PERMANENTLY UNVERIFIED rather than run a second recipient-side probe -- alt is an accessibility nicety here, not a correctness property; an earlier recipient probe the same day, 2026-07-30, came back without an answer on alt, and a recipient probe costs someone else's attention, which is not a price worth paying twice for a nicety. Do NOT treat alt as a delivered description: write a short caption line next to every image, which is the one description that is verified end to end.",
+    "images_are_ingested_not_embedded": "Teams replaces a pasted data: URI with its own: src becomes a RE-ENCODED data:image/jpeg preview and the blob reference moves to target-src, inside a span with itemtype=http://schema.skype.com/AMSImage. What the recipient receives is Teams' copy, not your bytes -- so a PNG is not what arrives. Confirmed to survive an actual send: visible in Teams web from a separate session, 2026-07-29."
+  },
+
+  "reprobe": {
+    "where": "The harness, corpus, fragments and clipboard tools named below are maintainers' tooling in the private workspace this skill was developed in. They are not shipped with the skill or in the public repository; the procedure is recorded here so a maintainer can repeat it and so a reader knows how each entry above was established. Findings from a reprobe are recorded in the maintainers' archive first, then propagated here.",
+    "when": "A paste that used to render correctly stops doing so; Teams or CKEditor ships a compose-box change; or an item under 'untested' needs closing.",
+    "web": {
+      "reaches": "Teams web (teams.microsoft.com/v2) in Edge. Scripted and repeatable; captures composed AND sent HTML.",
+      "corpus": "probe/corpus.json -- add new constructs THERE, not in a loose file, or the next run will not cover them.",
+      "how": [
+        "cd probe && npm install",
+        "node 00-login.mjs            # once, if the profile has no session",
+        "node 08-roundtrip.mjs --dry  # paste only; inspect captures/composed-*.html",
+        "node 08-roundtrip.mjs        # full send round trip; inspect captures/sent-*.html",
+        "node 11-cleanup.mjs --ids <ids printed above>",
+        "",
+        "Image questions have their own scripts, and each SENDS -- get an explicit go first:",
+        "node 13-image-ingest-timing.mjs   # paste-vs-send timing, read off endpoints not body sizes",
+        "node 14-image-size-format.mjs --manifest <fragments.json>   # size ladder. NOTE: the 2 MB refusal this step used to bypass with tools/setclip.py was REMOVED 2026-07-30 -- md2teams.py no longer refuses on size, so drive it directly unless you are probing something else md2teams refuses",
+        "node 15-fresh-readback.mjs --ids <ids>   # reload-then-look; NOTE it cannot defeat the local blob cache, so it cannot stand in for a second client"
+      ]
+    },
+    "desktop": {
+      "reaches": "The Teams desktop client. MANUAL -- the Playwright harness drives a browser and cannot reach it.",
+      "requires": "An explicit operator go per run: this pastes into a live chat with real people in it.",
+      "how": [
+        "1. Write the probe fragment as HTML, ONE construct group per fragment.",
+        "2. python tools/setclip.py --html-file probe/<name>.html",
+        "3. Operator pastes into the DESKTOP compose box with Ctrl+V.",
+        "4. Operator selects the composed content and presses Ctrl+C.",
+        "5. python tools/clipdump.py --out captures/desktop-<name>   (refuses any non-gitignored path)",
+        "6. WARNING: clipdump prints whatever is on the clipboard. Assume it may surface real work content. Run it deliberately.",
+        "7. For anything Teams may treat differently at SEND (images, mentions): send, copy the SENT message back, clipdump again, then delete the message.",
+        "8. A blob: URL in a read-back proves nothing about a send -- it is a session-local reference. To confirm an image survived, open the same chat in Teams WEB, which cannot see the desktop client's local blobs."
+      ],
+      "known_asymmetries": [
+        "Teams inserts its own <thead> around a pasted header row.",
+        "h4-h6 are silently clamped to h3 -- invisible unless you diff heading levels.",
+        "An external-URL <img> rejects the ENTIRE paste, masking every other construct in the same fragment. This is why probe/desktop-probe-2a/2b/2c exist as separate files.",
+        "A data: URI <img> is ingested: src becomes a RE-ENCODED data:image/jpeg preview, the blob reference lands in target-src, and the element gains itemtype=http://schema.skype.com/AMSImage. (This line said 'src becomes blob:' until 2026-07-30 -- the same error corrected elsewhere in this file on 07-29, left standing here. See supported.img.teams_rewrites_it.)",
+        "<at> is stripped to inert text and <emoji> vanishes -- a paste cannot create a real mention."
+      ]
+    },
+    "then": "Update supported / rejected / untested / gotchas / verified_on / verified_client HERE FIRST, then propagate to SKILL.md, md2teams.py _capabilities_text and render.py refusal messages, then re-run the offline suite (the plugin's tests/ directory in the repository; a bare-skill install does not carry them)."
+  }
+}

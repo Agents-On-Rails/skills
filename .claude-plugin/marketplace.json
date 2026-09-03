@@ -1,0 +1,20 @@
+{
+  "name": "aor",
+  "owner": {
+    "name": "Agents On Rails",
+    "url": "https://github.com/Agents-On-Rails"
+  },
+  "metadata": {
+    "description": "Agents-On-Rails skills: one plugin per skill family, each versioned on its own.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "aor-comm",
+      "source": "./plugins/aor-comm",
+      "description": "Preview 0.x: communication skills for agents. Today one skill, aor-format-teams-message, which drafts a rich Microsoft Teams message and puts it on the Windows clipboard ready to paste.",
+      "category": "productivity",
+      "keywords": ["teams", "clipboard", "formatting", "windows"]
+    }
+  ]
+}

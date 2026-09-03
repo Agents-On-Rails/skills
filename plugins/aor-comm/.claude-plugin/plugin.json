@@ -1,0 +1,13 @@
+{
+  "name": "aor-comm",
+  "version": "0.1.0",
+  "description": "Preview 0.x: communication skills for agents. Today one skill, aor-format-teams-message, which drafts a rich Microsoft Teams message and puts it on the Windows clipboard ready to paste.",
+  "author": {
+    "name": "Agents On Rails",
+    "url": "https://github.com/Agents-On-Rails"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/Agents-On-Rails/skills",
+  "repository": "https://github.com/Agents-On-Rails/skills",
+  "keywords": ["teams", "clipboard", "formatting", "windows"]
+}
