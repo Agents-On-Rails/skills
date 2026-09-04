@@ -1,6 +1,6 @@
 {
   "name": "aor-comm",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Preview 0.x: communication skills for agents. Today one skill, aor-format-teams-message, which drafts a rich Microsoft Teams message and puts it on the Windows clipboard ready to paste.",
   "author": {
     "name": "Agents On Rails",
