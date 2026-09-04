@@ -84,7 +84,7 @@ as a prerelease.
 
 ## The publish-safety gate
 
-Everything in this repository is public, and it is maintained from a workspace that also holds
+Everything in this repository is public, and it is maintained from a context that also holds
 private material. The gate is what keeps the two apart, and it is structural rather than
 editorial: a commit or push that carries the wrong thing is refused, not flagged for later.
 
