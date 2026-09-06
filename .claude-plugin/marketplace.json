@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Agents-On-Rails skills: one plugin per skill family, each versioned on its own.",
-    "version": "0.1.2"
+    "version": "0.2.0"
   },
   "plugins": [
     {
@@ -15,6 +15,13 @@
       "description": "Preview 0.x: communication skills for agents. Today one skill, aor-format-teams-message, which drafts a rich Microsoft Teams message and puts it on the Windows clipboard ready to paste.",
       "category": "productivity",
       "keywords": ["teams", "clipboard", "formatting", "windows"]
+    },
+    {
+      "name": "aor-kb",
+      "source": "./plugins/aor-kb",
+      "description": "Preview 0.x: evidence-graded knowledge-base skills for agents. Two skills: aor-kb-query, which searches a knowledge base and returns only claims that clear a trust grade, each stamped with its label; and aor-kb-capture, which records what a session learned as a graded claim behind a fail-closed employer-boundary guard.",
+      "category": "productivity",
+      "keywords": ["knowledge-base", "claims", "evidence", "windows"]
     }
   ]
 }

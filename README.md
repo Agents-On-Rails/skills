@@ -4,11 +4,12 @@ The public home of the `aor-*` agent skills: one repository that users of Claude
 Copilot CLI add as an install source, and that `gh skill` and `npx skills` install from directly,
 with every skill family shipped as a plugin under `plugins/` and versioned on its own.
 
-The marketplace is named `aor`. One plugin ships today, as a `0.x` preview:
+The marketplace is named `aor`. Two plugins ship today, each as a `0.x` preview:
 
 | Plugin | Version | Skills | Needs |
 |---|---|---|---|
-| `aor-comm` | 0.1.0 | `aor-format-teams-message`: drafts a rich Microsoft Teams message and puts it on the clipboard ready to paste | Windows; Python 3.9 or later on PATH as `python` |
+| `aor-comm` | 0.1.2 | `aor-format-teams-message`: drafts a rich Microsoft Teams message and puts it on the clipboard ready to paste | Windows; Python 3.9 or later on PATH as `python` |
+| `aor-kb` | 0.1.0 | `aor-kb-query`: searches a knowledge base and returns only claims that clear a trust grade, each stamped with its label. `aor-kb-capture`: records what a session learned as a graded claim, behind a fail-closed employer-boundary guard | Windows; Python 3.9 or later on PATH as `python`, plus the pinned `strictyaml` in the plugin's `requirements.txt` |
 
 ## Install
 
@@ -17,12 +18,14 @@ The marketplace is named `aor`. One plugin ships today, as a `0.x` preview:
 ```
 claude plugin marketplace add Agents-On-Rails/skills
 claude plugin install aor-comm@aor
+claude plugin install aor-kb@aor
 ```
 
-Inside a session the same two steps are `/plugin marketplace add Agents-On-Rails/skills` and
-`/plugin install aor-comm@aor`. The first command clones over SSH, so it needs an SSH key
+Inside a session the same steps are `/plugin marketplace add Agents-On-Rails/skills` and
+`/plugin install aor-comm@aor` or `/plugin install aor-kb@aor`. The first command clones over SSH, so it needs an SSH key
 registered with GitHub; without one, set `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` first and it clones
-over HTTPS. Plugin skills are namespaced, so the skill is `/aor-comm:aor-format-teams-message`.
+over HTTPS. Plugin skills are namespaced, so the skills are `/aor-comm:aor-format-teams-message`,
+`/aor-kb:aor-kb-query` and `/aor-kb:aor-kb-capture`.
 
 Claude Code installs the version named in the plugin's manifest and updates only when that version
 rises. To pick up a new version, run `claude plugin marketplace update aor` and then
@@ -36,6 +39,7 @@ then `claude plugin install aor-comm@aor`.
 ```
 copilot plugin marketplace add Agents-On-Rails/skills
 copilot plugin install aor-comm@aor
+copilot plugin install aor-kb@aor
 ```
 
 Copilot installs the tree at the tip of `main`, and `copilot plugin update aor-comm@aor` refreshes
@@ -45,6 +49,8 @@ to it whether or not the version has changed.
 
 ```
 gh skill install Agents-On-Rails/skills aor-format-teams-message
+gh skill install Agents-On-Rails/skills aor-kb-query
+gh skill install Agents-On-Rails/skills aor-kb-capture
 ```
 
 Installs the skill under its bare name for the agent you choose (`--agent`, `--scope`), from the tip
@@ -57,6 +63,8 @@ until `--unpin`.
 
 ```
 npx skills add Agents-On-Rails/skills --skill aor-format-teams-message
+npx skills add Agents-On-Rails/skills --skill aor-kb-query
+npx skills add Agents-On-Rails/skills --skill aor-kb-capture
 ```
 
 Follows the marketplace entries; `npx skills add Agents-On-Rails/skills --list` shows them, and

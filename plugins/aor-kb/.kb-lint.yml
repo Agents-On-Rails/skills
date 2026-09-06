@@ -1,0 +1,68 @@
+# .kb-lint.yml — OKF-E v0.1 profile config
+# P1 (2026-07-07): normative spec = okf-e-profile.md; checks implemented in tools/kb_lint.py
+# KB instances copy to their host-repo root (next to kb/).
+profile: okf-e/0.1
+
+# Boundary identity (P3, d-route): each DEPLOYED instance sets this to its manifest keyword
+# (work|personal); kb_capture + the pre-commit boundary backstop assert it against the repo's live
+# git remote owner + user.email and fail closed on mismatch. This template (the tools repo) is not a
+# KB instance, so it is left unset; set it on copy to an instance root.
+# instance: <work|personal>
+
+okf:
+  version: "0.1"
+  spec_repo: GoogleCloudPlatform/knowledge-catalog
+  spec_commit: d44368c15e38e7c92481c5992e4f9b5b421a801d # pinned 2026-07-07
+  spec_path: okf/SPEC.md
+  # Design finding: required key per concept = `type` ONLY;
+  # okf_version declares at bundle-root kb/index.md frontmatter (SPEC §11);
+  # every non-reserved .md under kb/ needs frontmatter with type: (§9).
+
+kb_path: kb/
+
+enums:
+  # d-kinds. Operator-only 4->5 override (gate G6): add the fifth kind here, one line.
+  kind: [fact, decision, procedure, lesson]
+  # v: verification-method enum -> trust tiers T1-T4 derived at query time, never stored
+  # ⚠ THIS IS A MEMBERSHIP WHITELIST, NOT A TRUST ORDER. It reaches code only as a set.
+  # The ordering lives in kb_query.TIER_OF_METHOD, and the two DISAGREE: this list puts
+  # model-inferred ahead of author-asserted, while the tier map makes author-asserted T2
+  # and model-inferred T3. Anything that ranks by position here is silently inverted for
+  # exactly that pair. The order is deliberately LEFT AS IS -- reordering would make the
+  # trap look fixed while leaving the next reader the same invitation to rank by index.
+  verified_by: [ran-tool, read-primary-source, model-inferred, author-asserted, unverified]
+  # GRADE-4 confidence
+  conf: [high, moderate, low, very-low]
+
+# L2 closed key whitelist = the claim grammar of `okf-e-profile.md` §4, all 15 keys (`date`
+# `why` + `scope` were missing from the P0 skeleton, caught by the wrap dry-run 2026-07-07)
+claim_keys: [id, v, conf, src, date, status, reason, why, until, seen, confirmed,
+             scope, supersedes, superseded-by, promoted-to]
+
+# d-defaults: src is the ONLY inheritable key in v0.1; v:/conf: stay per-claim (gate G1)
+defaults_inheritable: [src]
+
+# status: one field, kind-conditional values; implicit value = active (spec §6)
+status_enum: [proposed, accepted, superseded, deprecated, promoted]
+
+# beads-style ids: kind-letter prefix + lowercase alnum suffix (internal hyphens ok);
+# kb-lint fix assigns c-<4 random base36 chars>, never hand-typed (spec §4)
+id_format: "^[a-z]-[0-9a-z][0-9a-z-]{2,14}[0-9a-z]$"
+id_assign_prefix: c-
+
+# file classes under kb_path (spec §2): reserved names carry no frontmatter (except the
+# bundle-root index.md okf_version block); type: Ledger files are trails (no evidence:,
+# body inert); every OTHER .md is a claim file (evidence.profile required — L1)
+reserved_files: [index.md, log.md]
+ledger_type: Ledger
+
+checks: # G = gating, F = fixable; semantics in `okf-e-profile.md` §4 and §6
+  L1: frontmatter-shape   # G  + OKF conformance: type: on every non-reserved .md under kb_path
+  L2: grammar-whitelist   # G  brace grammar parses; keys in claim_keys
+  L3: kind-enum           # G
+  L4: per-kind-matrix     # G  required/forbidden after defaults: resolution
+  L5: evidence-asymmetry  # G  T1-T3 need src:+conf:; unverified bare; deprecated needs reason:
+                          #    FAIL-CLOSED: never default/coerce a missing method
+  L6: value-validity      # G  enums, ISO dates not-future, until: > v:-date, seen: >= 1
+  L7: link-integrity      # F/G reciprocal links fixable; dangling target gates
+  L8: id-unique           # F/G beads-style c-XXXX; missing id assignable; collision gates

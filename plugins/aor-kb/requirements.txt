@@ -1,0 +1,16 @@
+# aor-kb preview dependency manifest.
+#
+# Exactly one third-party dependency, imported at three module-level sites:
+#   tools/kb_boundary.py, tools/kb_lint.py, tools/kb_query.py
+# Each of those guards the import and exits 3 naming what is missing, so a second
+# person's first invocation points here instead of dying on a traceback.
+#
+# Pinned exactly, not floored: this is a preview, and a reproducible install is worth
+# more than picking up upstream changes silently. strictyaml resolves its own
+# python-dateutil>=2.6.0 transitively; that floor is upstream's to set, not ours.
+#
+# The stdlib-only rewrite that drops this dependency altogether is ticketed as
+# hardening, not preview work -- K3 defers it explicitly.
+#
+# Install:  python -m pip install -r requirements.txt
+strictyaml==1.7.3

@@ -1,0 +1,28 @@
+# instances.yml.example — OKF-E boundary manifest TEMPLATE (spec §14.3; R14)
+#
+# Copy to instances.yml (same directory) and fill in YOUR values. instances.yml is
+# machine-local and git-ignored: it names your repos, identities and employer signals,
+# none of which belong in a tracked file.
+#
+# kb_capture validates a THREE-WAY match (instance keyword -> this manifest -> the target
+# repo's live `git remote get-url origin` owner + `git config user.email`) before ANY
+# write, and HALTS on any mismatch. Tools FAIL CLOSED while instances.yml is absent.
+work:
+  root: "C:/path/to/your-work-kb-repo"
+  remote_owner: your-work-github-owner
+  identity: "you@employer.example"
+personal:
+  root: "C:/path/to/your-personal-kb-repo"
+  remote_owner: your-personal-github-owner
+  identity: "you@personal.example"
+# OPTIONAL boundary-signal config. Each list is operator-owned and empty by default:
+# an empty/absent list means that signal leg stays silent (your per-workspace choices
+# and the registered work-path list still gate every write). A present-but-garbled
+# section fails CLOSED.
+#   work_domains:            git user.email @domain / remote-host matches => WORK signal
+#   work_owner_suffixes:     github.com owner name suffix matches => WORK signal
+#   advisory_name_patterns:  folder-name globs that WARN at the forced choice (never veto)
+boundary:
+  work_domains: []
+  work_owner_suffixes: []
+  advisory_name_patterns: []
