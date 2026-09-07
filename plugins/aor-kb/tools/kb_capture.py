@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""kb-capture -- OKF-E v0.1 wrap-time capture + the employer-boundary routing guard
+"""kb-capture -- OKF-E v0.1 session-end capture + the employer-boundary routing guard
 (pilot P3, PoC, Deliverable E).
 
-Normative: okf-e-profile.md §14 (capture routing + the wrap pass). Parser, config
+Normative: okf-e-profile.md §14 (capture routing + the session-end capture pass). Parser, config
 discovery, id assignment and the L1-L8 checks are IMPORTED from kb_lint (same reuse
 pattern as kb_query) -- capture adds NO new trust machinery, only the routing guard
 and the quarantine-grade floor.
@@ -137,7 +137,7 @@ def grade_floor_ok(kind, v_value, verified_in_session):
     method = v_value.split()[0]
     if method in VERIFIED_GRADES and not verified_in_session:
         die(f"grade floor: capture may not write v: {method} without "
-            "--verified-in-session -- wrap is a recorder, not a verifier; record how you "
+            "--verified-in-session -- the capture pass is a recorder, not a verifier; record how you "
             "actually know (unverified / model-inferred / author-asserted), or affirm the "
             "in-session verification (§14.5 honesty gate)")
     return True

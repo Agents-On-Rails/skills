@@ -100,7 +100,8 @@ WHAT IT DOES  Writes ONE claim to the instance you name, tagged with how you kno
               (v: unverified or model-inferred) and is served only with --include-quarantined. You can
               record a trusted (T1) grade ONLY if you actually ran the tool / read the source THIS
               session — the --verified-in-session honesty gate.
-WHEN TO USE   at wrap, for durable knowledge worth reusing. Not for transient task notes.
+WHEN TO USE   at session end — whatever routine closes your session — for durable knowledge
+              worth reusing. Not for transient task notes.
 USAGE         aor-kb-capture <personal|work> <fact|decision|procedure|lesson> "<claim>" [fields…]
               Instance is REQUIRED (no default). Required fields depend on the KIND:
                 fact       how-you-know (v:) + confidence + source

@@ -653,10 +653,13 @@ def _dedupe(files):
     claim in it appears twice in the corpus and L8 reports each id as colliding WITH
     ITSELF -- the message names the same file and the same line on both sides.
 
-    On the write path that is a false gate. On the READ path it is worse and silent:
-    kb_query taints both copies, nothing clears the trust gate, and the tool serves
-    NOTHING at exit 0 -- which reads exactly like "the KB holds nothing on this", so a
-    consumer re-derives what it already knew. Observed, not reasoned.
+    On the write path that is a false gate. On the READ path it is worse and silent, and
+    the two argument shapes do NOT behave the same way -- do not conflate them. A directory
+    plus a file inside it taints only that file's claims and still serves everything else,
+    which looks healthy: measured 416 served of 437. The SAME directory named twice taints
+    the whole corpus and serves NOTHING at exit 0. Both read to a consumer like "the KB
+    holds nothing on this", so they re-derive what they already knew, but only the second
+    is obvious. Observed, not reasoned.
 
     Keyed on resolve() so the same file spelled two ways collapses; the first spelling
     is the one returned, because callers report paths back the way they were given.

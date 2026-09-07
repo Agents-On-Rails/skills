@@ -24,6 +24,11 @@ The design intent (REPORT §3.0): a minimal, measured experiment. The moat is
 validity). An unevidenced claim is not forbidden — it is **inert**: it never parses as a
 claim, so it can never be served as trusted.
 
+**"Wrap", in this document, means any session-end pass** — whatever routine closes your
+working session and decides what was worth keeping. OKF-E offers a capture-pass contract;
+whatever closes your session calls it. No particular tool is assumed, and nothing here
+requires one.
+
 ## 1. Base conformance (OKF, pinned)
 
 Findings read from the OKF spec at the pinned commit (P0, 2026-07-07 — these freeze L1):
@@ -330,7 +335,7 @@ the number — resolve max+1 manually in v0.1 (`merge=union` driver is gated, G9
   ran-tool/read-primary-source > author-asserted > model-inferred/unverified (quarantined).
 - Never treat a quarantined, superseded, or deprecated claim as current truth.
 - Cite claims by id (file#c-xxxx). To correct a claim: supersede or deprecate — never delete.
-- New knowledge: write claims through the wrap pass (kb-capture), then kb-lint before commit.
+- New knowledge: write claims through the session-end capture pass (kb-capture), then kb-lint before commit.
 ```
 
 Installed at P2 per SCOPE decision 11 (personal → global `~/.claude/CLAUDE.md`; work →
@@ -354,7 +359,7 @@ Fields between pipes: kind · `v:` value (method + date) · conf, or the derived
 fails lint at read time is served — if at all — as quarantined with the failing check
 named (choke point 3: trust is computed on every read, never stored).
 
-## 14. Capture routing & the wrap-time capture pass (Deliverable E — P3, normative)
+## 14. Capture routing & the session-end capture pass (Deliverable E — P3, normative)
 
 Transcribed from REPORT §3.5 (routing compass), §3.6 (wrap pass), §6.5 (capture hook) + the two P3
 boundary decisions ratified 2026-07-07 (SME panel: security + architecture + devops).
@@ -369,7 +374,7 @@ split; §14.2 adds the **instance** axis it lacked.
 
 ### 14.1 The tool
 
-`tools/kb_capture.py` — the wrap-time harvester. Runs at wrap when a §14.5 trigger fired; otherwise
+`tools/kb_capture.py` — the session-end harvester. Runs at your session-end pass when a §14.5 trigger fired; otherwise
 skips cleanly (a forced pass on an empty session manufactures filler = rot).
 
 ### 14.2 Routing — the boundary control (fail-closed, git-remote is the source of truth)
