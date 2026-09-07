@@ -29,6 +29,15 @@ import re
 import sys
 from pathlib import Path, PureWindowsPath
 
+# Leave no bytecode behind, and do it before the teamsfmt imports below. A .pyc records the
+# absolute path of its source, so every run of this file otherwise writes the running user's
+# install location into __pycache__ inside the delivered skill folder -- and this skill's
+# folder is exactly what a skill-scope install copies. Seven such files were found here
+# (#45), invisible to the publish gate, which enumerates through git, and to CI, which checks
+# out a tree where they do not exist. Structural rather than remembered: a `-B` documented in
+# SKILL.md would not have covered the runs that actually created them.
+sys.dont_write_bytecode = True
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from teamsfmt.console import force_utf8_output  # noqa: E402

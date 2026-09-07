@@ -183,6 +183,6 @@ Teams changed this surface before (`<div>` and inline styles started being strip
 guess — `capabilities.json` carries the procedure under `reprobe`. The Playwright harness and
 clipboard tools that procedure names are maintainers' tooling; they are not part of the
 installed skill or of the public repository. Update the manifest with what you observe and
-re-run the offline tests (the plugin's `tests/` directory in the repository; a bare-skill
-install does not carry them); the manifest is the single source of truth that both this file
-and the converter's validator read.
+re-run the offline suites — maintainers' tooling in the same sense as the harness above, kept
+outside the published plugin, so no install carries them; the manifest is the single source of
+truth that both this file and the converter's validator read.
