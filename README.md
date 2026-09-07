@@ -1,8 +1,9 @@
 # Agents-On-Rails skills
 
 The public home of the `aor-*` agent skills: one repository that users of Claude Code and GitHub
-Copilot CLI add as an install source, and that `gh skill` and `npx skills` install from directly,
-with every skill family shipped as a plugin under `plugins/` and versioned on its own.
+Copilot CLI add as an install source, and that `gh skill` and `npx skills` install from directly
+where a skill is self-contained, with every skill family shipped as a plugin under `plugins/` and
+versioned on its own.
 
 The marketplace is named `aor`. Two plugins ship today, each as a `0.x` preview:
 
@@ -49,9 +50,15 @@ to it whether or not the version has changed.
 
 ```
 gh skill install Agents-On-Rails/skills aor-format-teams-message
-gh skill install Agents-On-Rails/skills aor-kb-query
-gh skill install Agents-On-Rails/skills aor-kb-capture
 ```
+
+**`aor-kb-query` and `aor-kb-capture` are not offered this way — install `aor-kb` as a plugin
+instead** (`claude plugin install aor-kb@aor` or `copilot plugin install aor-kb@aor`, above). A
+skill-level install delivers a skill's own folder and nothing above it. Both `aor-kb` skills share
+their `tools/`, `requirements.txt` and `instances.yml.example` at the **plugin** root, so a
+skill-level install would place a `SKILL.md` whose tool is not there — verified by installing it.
+`aor-format-teams-message` keeps its tool beside its own `SKILL.md`, which is why it installs
+cleanly this way.
 
 Installs the skill under its bare name for the agent you choose (`--agent`, `--scope`), from the tip
 of `main` while this repository has no full GitHub Release. `gh skill update --all` refreshes it.
@@ -63,9 +70,10 @@ until `--unpin`.
 
 ```
 npx skills add Agents-On-Rails/skills --skill aor-format-teams-message
-npx skills add Agents-On-Rails/skills --skill aor-kb-query
-npx skills add Agents-On-Rails/skills --skill aor-kb-capture
 ```
+
+**`aor-kb-query` and `aor-kb-capture` are not offered this way either** — same reason as the
+`gh skill` section above; install `aor-kb` as a plugin.
 
 Follows the marketplace entries; `npx skills add Agents-On-Rails/skills --list` shows them, and
 `-a <agent> -y` runs without prompts.
