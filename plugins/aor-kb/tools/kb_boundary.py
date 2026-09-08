@@ -353,7 +353,14 @@ def remote_owner(root: Path):
     # consumes userinfo and an explicit port, and is already spoof-tested for the signal
     # path (17b) -- reusing it also removes the two parsers' disagreement and the false
     # refusal of a real github origin carrying a port (OWN-3).
-    url = kb_lint.run_git(root, "remote", "get-url", "origin").strip()
+    # #50: a non-zero code here is a NORMAL state (a repo with no `origin`), not an
+    # outage, so it is not reported -- it yields owner=None and the sole caller,
+    # _assert_repo_matches, already fails CLOSED on that. Unpacked explicitly rather
+    # than discarded so the next reader can see that the code was considered.
+    rc, out = kb_lint.run_git(root, "remote", "get-url", "origin")
+    url = out.strip()
+    if rc != 0:
+        return None, url
     m = REMOTE_RE.match(url)
     ok = m is not None and m.group("host").lower() == "github.com"
     return (m.group("owner") if ok else None), url
@@ -390,7 +397,11 @@ def _assert_repo_matches(inst, entry, root: Path, blocking):
         fail(f"instance '{inst}' expects remote owner '{entry['remote_owner']}' but "
              f"{root} pushes to '{owner}' -- routing to the wrong repo would cross the "
              "employer boundary")
-    email = kb_lint.run_git(root, "config", "user.email").strip()
+    # #50: non-zero means the identity is UNSET, which is a normal repo state and not an
+    # outage. Either way this leg fails CLOSED below -- an empty email never equals the
+    # manifest identity -- so the code needs unpacking, not a new branch.
+    _rc_email, _out_email = kb_lint.run_git(root, "config", "user.email")
+    email = _out_email.strip()
     if email != entry["identity"]:
         fail(f"instance '{inst}' expects identity '{entry['identity']}' but {root} "
              f"commits as '{email or 'unset'}'")
@@ -420,17 +431,78 @@ def resolve_instance(keyword, manifest):
 
 # ---------------------------------------------------------------- SEC-002 signals
 
+def _has_git_entry(cwd: Path):
+    """Is there a .git entry at cwd or any ancestor? The discriminator for the two
+    rc=128 cases below. A file or a directory both count -- a worktree/submodule .git
+    is a file, and an empty .git/ is a directory; either way the repository is meant
+    to be there."""
+    try:
+        here = cwd.resolve()
+    except OSError:
+        here = cwd
+    for p in [here, *here.parents]:
+        try:
+            if (p / ".git").exists():
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def git_signal_status(cwd: Path):
+    """(in_git, unavailable) -- #50.
+
+    `git rev-parse --is-inside-work-tree` exits 128 with EMPTY stdout for BOTH a
+    directory that is not a repository and a repository git cannot read (a .git
+    pointing nowhere, an empty .git/, a refused ownership check). Measured, with a
+    real repo as the positive control. While run_git discarded the exit code those two
+    were literally the same value, so every git outage read as "not a repo": work_signal
+    returned None and gate 1's structural veto stopped contributing -- silently, in the
+    personal and irreversible direction.
+
+    `unavailable` separates them on the only evidence that differs: whether a .git
+    entry exists at or above cwd. No .git anywhere is absent-BY-NATURE and not an
+    outage; a .git that exists while git still refuses the question is an outage.
+    """
+    rc, out = kb_lint.run_git(cwd, "rev-parse", "--is-inside-work-tree")
+    if rc == 0:
+        return out.strip() == "true", False
+    return False, _has_git_entry(cwd)
+
+
+def report_git_unavailable(cwd: Path):
+    """Tell the operator that gate 1 did not run. REPORTING, never halting (#50).
+
+    Halting on a non-zero git code is textbook-correct and wrong here: gate 2 --
+    registered choice plus a per-save human confirm -- already runs and is the real
+    control, so a halt would buy little and block real work on any transient git
+    failure, and friction on a safety control breeds workarounds. The defect was that
+    nobody was told a signal had gone missing. This is that telling.
+    """
+    print(f"kb-boundary: WARNING -- git could not read the repository at {cwd}, so the "
+          "structural work-signal check (gate 1) did NOT run. This is not the same as "
+          "'no work signal found'. Gate 2 -- your registered choice plus your "
+          "confirmation -- is the only control in force; confirm deliberately.",
+          file=sys.stderr)
+
+
 def _in_git(cwd: Path):
-    return kb_lint.run_git(cwd, "rev-parse", "--is-inside-work-tree").strip() == "true"
+    return git_signal_status(cwd)[0]
 
 
 def _email(cwd: Path):
-    return kb_lint.run_git(cwd, "config", "user.email").strip().lower()
+    # #50: non-zero means user.email is unset -- a normal state, not an outage. Reached
+    # only after _in_git() is True, so git itself is known to be working here.
+    rc, out = kb_lint.run_git(cwd, "config", "user.email")
+    return out.strip().lower() if rc == 0 else ""
 
 
 def _origin(cwd: Path):
-    url = kb_lint.run_git(cwd, "remote", "get-url", "origin").strip()
-    m = REMOTE_RE.match(url)
+    # #50: non-zero means there is no `origin` remote -- a normal state, not an outage.
+    rc, out = kb_lint.run_git(cwd, "remote", "get-url", "origin")
+    if rc != 0:
+        return None, None
+    m = REMOTE_RE.match(out.strip())
     if not m:
         return None, None
     return m.group("host").lower(), m.group("owner")
@@ -480,11 +552,24 @@ def work_signal(cwd: Path):
     """Reason string if the cwd shows a WORK signal, else None (§4). The explicit work-path
     list is checked FIRST so it fires even on GITLESS dirs; then the live git signals (a
     gitless non-listed dir gives no signal -- git config would bleed global identity, so
-    fail-open to 'no signal' and let the choice+confirm layer handle it)."""
+    fail-open to 'no signal' and let the choice+confirm layer handle it).
+
+    #50: that fail-open is deliberate FOR A GITLESS DIRECTORY and this docstring used to
+    be the whole justification -- but the code could not tell that case apart from a git
+    OUTAGE, so the same sentence silently covered a case it had never argued for. It can
+    now: git_signal_status() separates them, and an outage is REPORTED (not halted on)
+    before the None. Returning None on an outage is still the chosen behaviour; the
+    change is that the operator is told gate 1 did not run."""
     wp = work_path_match(cwd)
     if wp:
         return f"work-path {wp}"
-    if not _in_git(cwd):
+    # #50: checked here rather than inside _in_git so the warning cannot fire when the
+    # work-path list has ALREADY answered -- gate 1 did run in that case, and a warning
+    # that also fires when nothing is wrong teaches its reader to ignore it.
+    in_git, unavailable = git_signal_status(cwd)
+    if unavailable:
+        report_git_unavailable(cwd)
+    if not in_git:
         return None
     b = load_boundary()
     email = _email(cwd)

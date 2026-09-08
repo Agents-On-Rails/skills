@@ -633,8 +633,17 @@ def corpus_checks(all_claims, errs, cfg):
 
 def collect_files(cfg, paths, changed=False):
     if changed:
-        out = run_git(cfg["dir"], "diff", "--cached", "--name-only",
-                      "--diff-filter=ACMR")
+        rc, out = run_git(cfg["dir"], "diff", "--cached", "--name-only",
+                          "--diff-filter=ACMR")
+        if rc != 0:
+            # REPORT, do not halt (#50). An empty list here means "lint nothing", which
+            # a hook reads as "clean" -- so a git outage silently turns the check green.
+            # Saying so is the whole fix: halting would block a commit on any transient
+            # git failure, and friction on a safety control breeds workarounds.
+            print(f"kb-lint: WARNING -- `git diff --cached` exited {rc} in {cfg['dir']}; "
+                  "the staged-file list is empty because git could not be read, NOT "
+                  "because nothing is staged. Anything below covers zero files.",
+                  file=sys.stderr)
         files = [cfg["dir"] / f for f in out.splitlines()
                  if f.startswith(cfg["kb_path"] + "/") and f.endswith(".md")]
         return _dedupe([f for f in files if f.is_file()])
@@ -684,9 +693,23 @@ def _dedupe(files):
 
 
 def run_git(cwd, *args):
+    """(returncode, stdout). The exit code is PART OF THE ANSWER (#50).
+
+    Returning stdout alone made "git succeeded and said nothing" and "git failed and so
+    could say nothing" the same value, so every caller that tested only the text fell
+    open on a git outage. `rev-parse --is-inside-work-tree` exits 128 with empty stdout
+    for a directory that is not a repo AND for a repo whose .git points nowhere --
+    kb_boundary.git_signal_status() is where those two are told apart.
+
+    Deliberately does NOT assert returncode == 0: non-zero is a NORMAL state for several
+    of these queries (`remote get-url origin` on a repo with no origin, `config
+    user.email` with no identity set), so the judgement belongs in each caller, not here.
+    An absent git binary still RAISES out of subprocess -- loud rather than fail-open,
+    and left that way on purpose.
+    """
     r = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True,
                        encoding="utf-8")
-    return r.stdout
+    return r.returncode, r.stdout
 
 
 def run_checks(cfg, files, overrides=None):

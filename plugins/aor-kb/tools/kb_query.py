@@ -225,26 +225,43 @@ def snapshot(cfg, cfg_path, asof, tmp):
     ls-tree names are repo-root-relative; the instance may live in a subdir
     (the test instances do), so the instance prefix is stripped on the way out.
     """
-    top = kb_lint.run_git(cfg["dir"], "rev-parse", "--show-toplevel").strip()
-    if not top:
-        die("--as-of needs the instance under git")
-    rev = kb_lint.run_git(top, "rev-list", "-1", "--before", asof,
-                          "HEAD").strip()
+    # #50: this path already HALTED on each empty result, so it was never fail-open --
+    # but it blamed every failure on the same cause. The exit code lets each die() name
+    # what actually happened, and a git outage no longer masquerades as "not under git"
+    # or "no such commit". Behaviour is unchanged; only the diagnosis improves.
+    rc, out = kb_lint.run_git(cfg["dir"], "rev-parse", "--show-toplevel")
+    top = out.strip()
+    if rc != 0 or not top:
+        die(f"--as-of needs the instance under git (git exited {rc} in {cfg['dir']})")
+    rc, out = kb_lint.run_git(top, "rev-list", "-1", "--before", asof, "HEAD")
+    rev = out.strip()
+    if rc != 0:
+        die(f"--as-of {asof}: git rev-list exited {rc} in {top} -- the history could not "
+            "be read, which is NOT the same as there being no commit before that date")
     if not rev:
         die(f"--as-of {asof}: no commit at or before that date")
     root = Path(tmp)
     prefix = cfg["dir"].resolve().relative_to(Path(top).resolve()).as_posix()
     prefix = "" if prefix == "." else prefix + "/"
-    names = kb_lint.run_git(top, "ls-tree", "-r", "--name-only", rev, "--",
-                            prefix + cfg["kb_path"] + "/").splitlines()
+    rc, out = kb_lint.run_git(top, "ls-tree", "-r", "--name-only", rev, "--",
+                              prefix + cfg["kb_path"] + "/")
+    if rc != 0:
+        die(f"--as-of {asof}: git ls-tree exited {rc} at {rev[:12]} -- the tree could not "
+            "be listed, which is NOT the same as it being absent")
+    names = out.splitlines()
     if not names:
         die(f"--as-of {asof}: no {cfg['kb_path']}/ tree at {rev[:12]}")
     for n in names:
         if n.endswith(".md"):
             dest = root / n[len(prefix):]
             dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_text(kb_lint.run_git(top, "show", f"{rev}:{n}"),
-                            encoding="utf-8", newline="\n")
+            rc, blob = kb_lint.run_git(top, "show", f"{rev}:{n}")
+            if rc != 0:
+                # Writing an empty file here would serve a SILENTLY EMPTY corpus at
+                # exit 0, which reads to a consumer as "the KB holds nothing on this".
+                die(f"--as-of {asof}: git show exited {rc} for {n} at {rev[:12]} -- "
+                    "refusing to snapshot a file whose contents could not be read")
+            dest.write_text(blob, encoding="utf-8", newline="\n")
     shutil.copy(cfg_path, root / ".kb-lint.yml")
     return kb_lint.load_config(root / ".kb-lint.yml")
 
