@@ -23,8 +23,10 @@ PY    = python -E -B                      (from PATH)
 QUERY = <plugin-root>/tools/kb_query.py
 ```
 `-E` ignores `PYTHON*` environment variables, so a `PYTHONPATH` cannot shadow the pinned
-`strictyaml` that parses every file the boundary check compares against; `-B` writes no
-`.pyc` into the shipped tree. Both flags are part of the command — do not drop them.
+`strictyaml` that parses every file the boundary check compares against. `-B` is a second
+layer against `.pyc` in the shipped tree — the tools already set `sys.dont_write_bytecode`
+themselves, so the flag is what still covers a run that dies before reaching that line.
+Both are part of the command — do not drop them.
 If `python` is not on PATH, or `tools/kb_query.py` is not where this says, say so plainly and
 stop — do not guess an alternative interpreter or path.
 

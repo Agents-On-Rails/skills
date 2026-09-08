@@ -432,10 +432,22 @@ def resolve_instance(keyword, manifest):
 # ---------------------------------------------------------------- SEC-002 signals
 
 def _has_git_entry(cwd: Path):
-    """Is there a .git entry at cwd or any ancestor? The discriminator for the two
-    rc=128 cases below. A file or a directory both count -- a worktree/submodule .git
-    is a file, and an empty .git/ is a directory; either way the repository is meant
-    to be there."""
+    """Is a repository INTENDED here? The discriminator for the two rc=128 cases below.
+
+    Two channels, because git itself accepts two. (1) A .git entry at cwd or any
+    ancestor -- a file or a directory both count, since a worktree's and a submodule's
+    .git is a FILE and a half-created repo's is an empty directory; either way the
+    repository is meant to be there. (2) GIT_DIR / GIT_WORK_TREE in the environment,
+    which override discovery entirely: with those set and the target destroyed, git
+    fails while NO .git exists at or above cwd, and channel (1) alone called that "not
+    a repository" -- a real work tree with git down, reported as fine.
+
+    ⚠ Note the shape of that miss: it is the same ENVIRONMENT channel item 04 closed
+    for PYTHON*. `-E` does not touch GIT_*, and git still inherits the full
+    environment, so the environment can take this signal down without touching disk.
+    """
+    if os.environ.get("GIT_DIR") or os.environ.get("GIT_WORK_TREE"):
+        return True
     try:
         here = cwd.resolve()
     except OSError:
