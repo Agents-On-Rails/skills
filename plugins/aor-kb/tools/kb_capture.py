@@ -46,6 +46,16 @@ import sys
 from datetime import date
 from pathlib import Path
 
+# No bytecode, and it MUST be set before the sibling imports below (#44). This module is
+# the one that actually produced the observed pollution: it imports three siblings, so a
+# single `kb_capture` run writes kb_lint, kb_boundary and kb_query .pyc -- and NOT its own,
+# because a module run as __main__ never writes bytecode for itself. That asymmetry is why
+# the three-file set was misread as "the query path" when it is the capture path, and why a
+# `--help` reproduction of the wrong tool proves nothing. See kb_query.py for the full
+# rationale; the short form is that for a maintainer this tree IS the publish source, and a
+# .pyc there embeds the absolute path of the machine that wrote it.
+sys.dont_write_bytecode = True
+
 # Self-locate BEFORE importing siblings (K4): under a plugin install the tools
 # are reached by absolute path from a SKILL.md, so cwd is the caller's, not tools/.
 sys.path.insert(0, str(Path(__file__).resolve().parent))

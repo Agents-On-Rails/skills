@@ -69,6 +69,20 @@ except ImportError as _exc:  # aor-kb dependency guard -- K3
     )
     raise SystemExit(3)
 
+# No bytecode, and it MUST be set before the sibling imports below (#44). Importing a
+# sibling writes tools/__pycache__/<mod>.cpython-NNN.pyc into the tree it was imported
+# from -- and for a maintainer that tree IS the publish source, where a .pyc is a content
+# leak: it embeds the absolute path of the machine that wrote it. The publish gate fails it
+# as `aor-windows-user-path` and CUT-13 fails it on disk, so it cannot ship; the cost is
+# that it reddens the tree under whoever opens it next. Observed twice on 2026-09-08,
+# ~40 minutes apart, in two different sessions, neither of which wrote it knowingly.
+# Structural rather than remembered: the shipped SKILL.md specifies `PY = python` with no
+# `-B`, so a documented flag would never have covered the runs that actually created these.
+# The flag alone suffices here -- unlike aor-comm's md2teams.py (#46), none of these tools
+# spawns a python subprocess (kb_lint shells out to `git` only), so no child interpreter
+# needs PYTHONDONTWRITEBYTECODE in the environment.
+sys.dont_write_bytecode = True
+
 # Self-locate BEFORE importing siblings (K4): under a plugin install the tools
 # are reached by absolute path from a SKILL.md, so cwd is the caller's, not tools/.
 sys.path.insert(0, str(Path(__file__).resolve().parent))

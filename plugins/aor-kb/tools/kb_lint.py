@@ -18,6 +18,13 @@ import sys
 from datetime import date
 from pathlib import Path
 
+# No bytecode (#44). This module imports no siblings, so as an entry point it writes
+# nothing today and this line is a no-op -- it is here because ANY of the three CLIs can be
+# the first one you run, and the guard belongs in each of them rather than in whichever one
+# happens to import the others. The same reasoning put it in aor-comm's smoke-test.py as
+# well as md2teams.py (#46). See kb_query.py for why a .pyc in this tree is a leak.
+sys.dont_write_bytecode = True
+
 try:
     from strictyaml import dirty_load
 except ImportError as _exc:  # aor-kb dependency guard -- K3
