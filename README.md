@@ -10,7 +10,7 @@ The marketplace is named `aor`. Two plugins ship today, each as a `0.x` preview:
 | Plugin | Version | Skills | Needs |
 |---|---|---|---|
 | `aor-comm` | 0.1.4 | `aor-format-teams-message`: drafts a rich Microsoft Teams message and puts it on the clipboard ready to paste | Windows; Python 3.9 or later on PATH as `python` |
-| `aor-kb` | 0.1.3 | `aor-kb-query`: searches a knowledge base and returns only claims that clear a trust grade, each stamped with its label. `aor-kb-capture`: records what a session learned as a graded claim, behind a fail-closed employer-boundary guard | Windows; Python 3.9 or later on PATH as `python`, plus the pinned `strictyaml` in the plugin's `requirements.txt` |
+| `aor-kb` | 0.1.4 | `aor-kb-query`: searches a knowledge base and returns only claims that clear a trust grade, each stamped with its label. `aor-kb-capture`: records what a session learned as a graded claim, behind a fail-closed employer-boundary guard | Windows; Python 3.9 or later on PATH as `python`, plus the pinned `strictyaml` in the plugin's `requirements.txt` |
 
 ## Install
 

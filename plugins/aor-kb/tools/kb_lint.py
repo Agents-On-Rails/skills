@@ -631,7 +631,7 @@ def corpus_checks(all_claims, errs, cfg):
 
 # ---------------------------------------------------------------- targets & report
 
-def collect_files(cfg, paths, changed=False):
+def collect_files(cfg, paths, changed=False, hook=False):
     if changed:
         rc, out = run_git(cfg["dir"], "diff", "--cached", "--name-only",
                           "--diff-filter=ACMR")
@@ -640,6 +640,18 @@ def collect_files(cfg, paths, changed=False):
             # a hook reads as "clean" -- so a git outage silently turns the check green.
             # Saying so is the whole fix: halting would block a commit on any transient
             # git failure, and friction on a safety control breeds workarounds.
+            #
+            # #51 splits that ruling rather than overturning it. The friction argument is
+            # about a HUMAN who gets blocked and routes around the gate; in hook context
+            # there is no human waiting to be told, only a commit to stop, and the failure
+            # is silent-green in the irreversible direction. So the hook refuses and the
+            # interactive path is left exactly as #50 ruled it.
+            if hook:
+                die(f"REFUSING -- `git diff --cached` exited {rc} in {cfg['dir']}. In hook "
+                    "context a staged-file list that could not be read is a FAILURE, not an "
+                    "empty list: linting zero files would report this commit clean without "
+                    "having looked at it. Re-run once git is healthy, or bypass deliberately "
+                    "with `git commit --no-verify`.")
             print(f"kb-lint: WARNING -- `git diff --cached` exited {rc} in {cfg['dir']}; "
                   "the staged-file list is empty because git could not be read, NOT "
                   "because nothing is staged. Anything below covers zero files.",
@@ -1028,6 +1040,9 @@ def main():
     common.add_argument("--config", help="explicit .kb-lint.yml (default: walk-up)")
     common.add_argument("--changed", action="store_true",
                         help="staged kb/**.md only")
+    common.add_argument("--hook", action="store_true",
+                        help="caller is a git hook: an unreadable staged-file list is a "
+                             "failure, not an empty list (#51)")
     common.add_argument("--quiet", action="store_true")
     sp.add_parser("check", parents=[common])
     p_fix = sp.add_parser("fix", parents=[common])
@@ -1052,7 +1067,8 @@ def main():
         die("--materialize is reserved for gate G1 (v0.2): defaults expansion is "
             "admitted only after the write-friction + no-laundering audit")
 
-    files = collect_files(cfg, [Path(p).resolve() for p in args.paths], args.changed)
+    files = collect_files(cfg, [Path(p).resolve() for p in args.paths], args.changed,
+                          hook=args.hook)
     if not files:
         if not args.quiet:
             print("OK: nothing to lint")
