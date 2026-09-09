@@ -20,10 +20,21 @@ The marketplace is named `aor`. Two plugins ship today, each as a `0.x` preview:
 ## Before you install
 
 **What these skills do on your machine.** Both plugins are Python that runs locally when you invoke
-the skill. Neither makes any network call: there is no network-capable import anywhere in either
-plugin's code. `aor-comm` reads only the files you name on the command line, writes nothing to disk,
-and replaces the clipboard. `aor-kb` reads and writes a knowledge base you point it at, and creates
-a small configuration directory under your local application data on first use.
+the skill. Neither makes a network call: no module in either plugin imports anything
+network-capable, and the only subprocess either one starts is `git`, run against a local repository
+you named — the subcommands it uses are all local ones. `aor-kb` additionally imports `strictyaml`,
+a third-party package you install yourself; that is outside this repository and its behaviour is its
+own.
+
+- **`aor-comm`** reads the files you name on the command line, plus one file it ships with —
+  `capabilities.json`, its own manifest, read from its install directory on every render. It writes
+  nothing to disk at all, and it replaces the clipboard.
+- **`aor-kb`** reads and writes a knowledge base you point it at. Two things worth knowing before
+  you install it. **A query is logged by default:** unless you pass `--no-log`, each query appends
+  a line to `<your-kb>/_serve/serve-log.jsonl` recording the time, **the full command line you
+  typed**, and the id of every claim it returned. And it writes a small configuration directory
+  under your local application data — created when you run `kb-capture init` or when a capture
+  first records a workspace, not merely by querying.
 
 **The clipboard is emptied before it is written.** `aor-comm` clears the clipboard and then writes
 the new contents. If the write fails part-way, the clipboard is already empty — whatever was on it
@@ -32,7 +43,9 @@ before is gone. Do not run it holding something you cannot regenerate.
 **An unpinned install follows this repository.** On the channels that do not pin — Copilot CLI,
 which tracks the tip of `main`, and `gh skill` or `npx skills` without a pin — the next update runs
 whatever has been committed here since, with the file-system and clipboard access you gave the
-skill. Pin a tag if that is not what you want; each install section below says how.
+skill. **Not every channel can pin.** Claude Code and `gh skill` can, and their sections say how;
+Copilot CLI accepts a pin syntax whose effect on install is unconfirmed here; `npx skills` has no
+pin at all. If you need a fixed version, use Claude Code or `gh skill --pin`.
 
 **What a pin does and does not give you.** A pinned tag cannot be moved: repository rulesets refuse
 tag deletion and non-fast-forward tag pushes, and the publish gate refuses to repoint a tag the
@@ -41,12 +54,46 @@ repository is signed, every commit reports `verified=false reason=unsigned`, and
 carry no signature. Pinning means "the same bytes as last time"; it does not mean "the bytes came
 from the maintainer". If you need that, review the diff yourself.
 
-**Windows only.** Both skills call Windows APIs — `aor-comm` writes the clipboard through `user32`,
-`aor-kb` resolves its configuration directory through a Windows shell API and refuses to import
-elsewhere by design. They do not run on macOS or Linux. The maintainer tooling in `scripts/` is
-Windows and Linux only and throws on anything else.
+**Windows only.** Both plugins target Windows and neither is supported anywhere else.
+`aor-comm` writes the clipboard through `user32` and cannot work off Windows at all. `aor-kb`
+resolves its configuration directory through a Windows shell API that reads the process token, and
+raises on any other platform rather than falling back to an environment variable — so
+`aor-kb-capture`, and any query that names an instance, refuse immediately off Windows. (A query
+given an explicit path never reaches that guard and may import elsewhere; that is an accident of
+where the check sits, not a supported configuration.) The maintainer tooling in `scripts/` runs on
+Windows and Linux and throws on anything else.
 
 ## Install
+
+### What you need first
+
+**Python, reachable as `python`.** Both plugins run Python 3.9 or later and invoke it as `python`,
+so that name must resolve to a real interpreter. Check with `python --version`. On Windows a fresh
+machine often resolves `python` to the Microsoft Store stub, which opens the Store instead of
+running anything — if `python --version` opens the Store or prints nothing, install Python and make
+sure it precedes the stub on PATH.
+
+**`aor-kb` needs one more package, and will not run without it.** `aor-kb` depends on
+`strictyaml`, pinned:
+
+```
+python -m pip install strictyaml==1.7.3
+```
+
+Install it into the same interpreter `python` resolves to. Without it, the first invocation of
+either `aor-kb` skill exits 3 and names what is missing — it does not fail at install time, and
+**no plugin-manager check will tell you**, so do this before you try the skill. The pin is the one
+in the plugin's own `requirements.txt`; if it has moved, that file wins over this page.
+`aor-comm` has no third-party dependency and needs nothing here.
+
+**Per channel**, in addition:
+
+| Channel | Also needs |
+|---|---|
+| Claude Code | Claude Code itself, and an SSH key registered with GitHub unless you set the HTTPS variable below |
+| Copilot CLI | GitHub Copilot CLI |
+| `gh skill` | GitHub CLI new enough to carry `gh skill`, which is a preview subcommand — `gh skill --help` tells you whether you have it |
+| `npx skills` | Node and npx |
 
 ### Which channel gives you what
 
@@ -57,8 +104,8 @@ carry `aor-kb`.
 |---|---|---|---|
 | Claude Code plugin | `claude plugin install aor-comm@aor` | plugin, namespaced | `/aor-comm:aor-format-teams-message` |
 | Copilot CLI plugin | `copilot plugin install aor-comm@aor` | plugin, bare name when unique | you describe the task; Copilot matches on the skill's description rather than a typed command |
-| `gh skill` | `gh skill install Agents-On-Rails/skills aor-format-teams-message` | bare name, flat per-scope directory | the bare skill name, per your agent's convention |
-| `npx skills` | `npx skills add Agents-On-Rails/skills --skill aor-format-teams-message` | bare name under `.claude/skills/` in the current project | the bare skill name, per your agent's convention |
+| `gh skill` | `gh skill install Agents-On-Rails/skills aor-format-teams-message --agent <agent> --scope <scope>` | bare name, in the directory `--agent` and `--scope` select | the bare skill name, per your agent's convention |
+| `npx skills` | `npx skills add Agents-On-Rails/skills --skill aor-format-teams-message -a <agent>` | bare name, in the directory `-a` selects — with `-a claude-code`, `.claude/skills/` in the current project | the bare skill name, per your agent's convention |
 
 The double prefix in `/aor-kb:aor-kb-query` is deliberate: the plugin is `aor-kb` and the skill is
 `aor-kb-query`, so that the bare name stays globally unique on the channels that install it flat.
@@ -68,8 +115,10 @@ lines**, and which one answers depends on the host:
 
 - **Claude Code** refuses a second plugin that declares a name an installed plugin already owns, and
   names the remedy. A personal skill of the same bare name shadows the plugin's bare alias.
-- **Copilot CLI** resolves first-found-wins across its discovery tiers, with plugin skills seventh of
-  eight. A plugin skill that loses is **silently ignored** — no message, no error.
+- **Copilot CLI** resolves first-found-wins across its discovery tiers, and plugin skills rank below
+  every project and personal skills directory. So a copy installed by `gh skill` or `npx skills`
+  beats the plugin's, and the plugin's is **silently ignored** — no message, no error.
+  `copilot skill list` is what shows you which one won.
 - **`gh skill`** refuses a same-named skill from a second repository unless you pass `--force`, which
   overwrites. The two never coexist.
 
@@ -101,6 +150,10 @@ Inside a session the same steps are `/plugin marketplace add Agents-On-Rails/ski
   status `✔ enabled` and the version you expect. A running session keeps resolving the copy it
   started with, so the restart is not optional and `plugin list` in a new terminal says nothing
   about a session already open.
+  ⚠ **`✔ enabled` means loaded, not working.** For `aor-kb` it will say `✔ enabled` even when
+  `strictyaml` is missing and every invocation exits 3. The only check that covers that is to run
+  the skill — invoke `/aor-kb:aor-kb-query` once and see it answer. Do the dependency step above
+  first and this will not arise.
 
 ### GitHub Copilot CLI
 
@@ -122,18 +175,31 @@ copilot plugin install aor-kb@aor
   and the ref is recorded in the profile settings. Its effect on a subsequent install has not been
   confirmed here, so treat Copilot as an unpinned channel unless you have verified otherwise
   yourself.
-- **Confirm it worked** — start a **new** session, then run `copilot skill list`. Copilot enumerates
-  skills once at session start, so a skill added to a running session will not appear in it and the
-  skill tool will answer "not found" even though the install succeeded.
+- **Confirm it worked** — run `copilot skill list`. It runs in its own process and reads the
+  installed set directly, so it tells you the install landed.
+  ⚠ **Then start a new session before using the skill.** Copilot enumerates skills once at session
+  start, so a session that was already open when you installed will answer "not found" no matter
+  what `skill list` says. The two checks answer different questions: `skill list` tells you the
+  files are there, a new session is what makes them reachable.
+  ⚠ **Being listed means loaded, not working.** As on Claude Code, an `aor-kb` whose `strictyaml`
+  is missing lists normally and exits 3 when invoked. Do the dependency step above, then ask
+  Copilot to do something the skill covers and see it answer.
 
 ### gh skill
 
 ```
-gh skill install Agents-On-Rails/skills aor-format-teams-message
+gh skill install Agents-On-Rails/skills aor-format-teams-message --agent claude-code --scope user
 ```
 
-**`aor-kb-query` and `aor-kb-capture` are not offered this way — install `aor-kb` as a plugin
-instead** (`claude plugin install aor-kb@aor` or `copilot plugin install aor-kb@aor`, above). A
+**Name the agent and the scope.** Run non-interactively without them, `gh skill` defaults to
+`--agent github-copilot` and `--scope project`, so the command lands the skill somewhere you may not
+have meant. Substitute `--agent github-copilot` for Copilot, or drop `--scope user` to install into
+the current repository instead of your home directory.
+
+**Do not install `aor-kb-query` or `aor-kb-capture` this way — install `aor-kb` as a plugin
+instead** (`claude plugin install aor-kb@aor` or `copilot plugin install aor-kb@aor`, above).
+⚠ **The installer will offer them to you anyway**: they are declared in the marketplace manifest, so
+`--list` shows all three skills and an install of either will appear to succeed. It does not. A
 skill-level install delivers a skill's own folder and nothing above it. Both `aor-kb` skills share
 their `tools/`, `requirements.txt` and `instances.yml.example` at the **plugin** root, so a
 skill-level install places a `SKILL.md` whose tool is not there. **It looks like it worked**: the
@@ -151,11 +217,14 @@ its tool beside its own `SKILL.md`, which is why it installs cleanly this way.
 - **To pin** — `--pin aor-comm--v0.1.0`, or name it as
   `aor-format-teams-message@aor-comm--v0.1.0`. A pin takes a tag or a commit SHA, and a pinned
   install is left alone by `gh skill update` until `--unpin`.
-- **Unpinned resolution is repository-wide, and that will surprise you.** An unpinned install
-  resolves to the newest full GitHub Release anywhere in this repository, not to the newest tag and
-  not to the skill's own tag; plain tags are ignored and prereleases do not count. While this
-  repository has no full Release, that means the tip of `main`. The moment one exists — for either
-  plugin — every unpinned install of every skill here resolves to it. Pin if that matters to you.
+- **Unpinned resolution is repository-wide, and that will surprise you.** `gh skill install --help`
+  states the order as "latest tagged release in the repository, else default branch HEAD". Measured
+  here, "tagged release" means a **GitHub Release**, not a git tag: plain tags are ignored and
+  prereleases do not count. This repository has twelve tags and exactly one Release,
+  `v0.1.0-preview`, which is marked prerelease — so today an unpinned install resolves to the tip of
+  `main`, not to any of those tags. **The first non-prerelease Release, for either plugin, would
+  become the resolution target for every unpinned install of every skill here**, because the search
+  is repository-wide rather than per-skill. Pin if that matters to you.
 - **Confirm it worked** — `gh skill` has no `list` command. Look in the directory the install
   reported and check the skill's folder is there with its `SKILL.md` **and its tool files**; a
   one-file result is the silent failure described above. On Windows the success output may end with
@@ -165,12 +234,16 @@ its tool beside its own `SKILL.md`, which is why it installs cleanly this way.
 ### npx skills
 
 ```
-npx skills add Agents-On-Rails/skills --skill aor-format-teams-message
+npx skills add Agents-On-Rails/skills --skill aor-format-teams-message -a claude-code
 ```
 
-**`aor-kb-query` and `aor-kb-capture` are not offered this way either** — same reason as the
-`gh skill` section above, and the same successful-looking one-file result. Install `aor-kb` as a
-plugin.
+**Name the agent.** Without `-a` the installer prompts, and the identifier for Claude Code is
+`claude-code` — `-a claude` is rejected. Add `-y` to skip the prompts entirely, and `-g` to install
+globally rather than into the current project.
+
+**Do not install `aor-kb-query` or `aor-kb-capture` this way either** — same reason as the
+`gh skill` section above, and the same successful-looking one-file result. `--list` will show all
+three skills here too. Install `aor-kb` as a plugin.
 
 - **Name after install** — the bare skill name. With `-a claude-code` it lands in
   `.claude/skills/<name>/` **inside the current project**, not in your home directory; `-g` installs
@@ -191,11 +264,14 @@ plugin.
 ### When these notes were taken
 
 Everything above about how the four installers behave was observed on Windows on **2026-09-09**
-against Claude Code 2.1.266, GitHub Copilot CLI 1.0.83, GitHub CLI 2.93.0 and `skills@latest` under
-npx 11.12.1 / Node 26. `gh skill` is a GitHub CLI **preview** and is documented as subject to change
-without notice; Copilot CLI has moved through eleven point releases in the seven weeks these notes
-were built from. Where an installer's behaviour has changed since, its own `--help` wins over this
-page.
+against Claude Code 2.1.266, GitHub Copilot CLI 1.0.83, GitHub CLI 2.93.0, and the `skills` npm
+package 1.5.25 run through npm/npx 11.12.1 on Node 26. **`skills@latest` is a moving target** — the
+command this page gives you resolves whatever is newest at the time you run it, which may not be
+1.5.25. `gh skill` is a GitHub CLI **preview** and is documented as subject to change
+without notice; Copilot CLI released point versions roughly weekly over the period these notes were
+built from. All four installers move faster than this page does. **Where an installer's behaviour
+has changed since, its own `--help` wins over this page** — and if you find a difference, please
+report it, because that is the failure mode this section exists to make visible.
 
 ## Versions and releases
 
@@ -255,10 +331,12 @@ Pushes to `main` must raise the `version` of every plugin they touch; a tag must
 `main`; non-fast-forward pushes to `main` and tag deletions are refused outside INCIDENT MODE.
 Two repository rulesets are the second lock: one on the default branch and one on all tags, each
 refusing deletion and non-fast-forward pushes. Note that these are **rulesets**, not classic branch
-protection — the classic branch-protection API reports this branch as unprotected, and checking
-there will mislead you. Both rulesets allow organisation and repository admins to bypass them, so
-they guard against accident rather than against the maintainer; that matches the threat model stated
-below.
+protection, and the two APIs disagree in a way that will waste your time:
+`repos/.../branches/main/protection` returns **404 "Branch not protected"** while
+`repos/.../branches/main` returns **`protected: true`**. Both are accurate about their own question.
+Check `repos/.../rulesets`. Both rulesets allow organisation and repository admins to bypass them,
+so they guard against accident rather than against the maintainer; that matches the threat model
+stated below.
 
 ### On a hit
 
@@ -273,17 +351,24 @@ contains a listed identifier is reported only as a count, and the name is withhe
    comment lines allowed, UTF-8. The default location is `~/.aor/publish-denylist.txt`.
 3. Fetch the pinned scanner: `pwsh scripts/get-gitleaks.ps1`. It verifies the download against
    the hashes pinned in the gate script and refuses anything else.
-4. Install: `pwsh scripts/install-gate.ps1 -GitHubUser <your login>`. In one act it checks that
-   the clone is not nested inside another work tree, that the list and the scanner are in place,
-   writes the two hooks, records the list and scanner paths in local git config, forces the
-   remote URL to HTTPS and sets a credential helper that reads your token from the gh keyring.
-   It writes nothing if any check fails, and it is safe to re-run.
+4. Install: `pwsh scripts/install-gate.ps1 -GitHubUser <your login>`. It aborts at the first failed
+   guard and writes nothing on abort. The guards, in order: the clone is not nested inside another
+   work tree; the identifier list and the pinned scanner are both in place; `pwsh` and both root
+   validators (`claude`, `gh`) are on PATH; **`core.hooksPath` is unset in every scope**; and a
+   remote `origin` exists. Then it writes the two hooks, records the list and scanner paths in local
+   git config, rewrites the `origin` URL to HTTPS **if it is a github.com URL** — a non-GitHub origin
+   is left alone — and sets a credential helper that reads your token from the `gh` keyring. Safe to
+   re-run.
+   ⚠ **The `core.hooksPath` guard catches people out.** If you use husky, a global hooks directory,
+   or anything else that sets it, this aborts and tells you nothing about which scope set it. Check
+   `git config --show-origin --get core.hooksPath`.
 
 **Maintaining requires Windows or Linux.** The scanner fetcher and the gate both resolve a pinned
-binary for Windows x64 or Linux x64 and throw on anything else, so the gate cannot run on macOS and
-CI runs neither macOS nor any arm64 host. The platform test looks at the operating system only, so
-on an arm64 Windows or Linux machine the fetch takes the x64 branch and fails later at the hash
-comparison rather than at a clear platform error.
+binary for Windows x64 or Linux x64 and throw on anything else, so the gate cannot run on macOS, and
+CI runs neither macOS nor any arm64 host. The platform test looks at the operating system only and
+never at the architecture, so on an arm64 machine the fetch takes the x64 branch, downloads the x64
+binary and **passes both hash checks** — the pins are on the x64 artefact. Whether it then runs is
+up to your emulation layer. Untested here; treat arm64 as unsupported rather than as known-broken.
 
 From then on every commit and push from that clone runs the gate. Bypassing it (`--no-verify`,
 editing the local config) is a deliberate, visible act; the threat model is accidental exposure

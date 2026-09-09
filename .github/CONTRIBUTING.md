@@ -31,7 +31,8 @@ Your commits keep their authorship. This is the only path by which anything reac
 exists so that no content ever lands here without the full gate having run over it.
 
 Practical consequence: a merge may take a while, because it needs the maintainer at a machine with
-the gate installed. It is not stuck.
+the gate installed. It is not stuck. **If you have heard nothing after two weeks, comment on the
+pull request** — that is a reasonable nudge, not a nuisance.
 
 ## What the gate will refuse
 
@@ -44,8 +45,16 @@ look like session artifacts are refused, no file may exceed 1 MB, no binary file
 `SKILL.md` must sit at `plugins/aor-<family>/skills/<name>/SKILL.md` or `legacy/<name>/SKILL.md`
 with a frontmatter `name` equal to its directory and unique across the tree.
 
-Running the gate yourself is possible but needs a private identifier list you will not have. The
-tree and pattern layers are the parts you can meaningfully self-check; `README.md` has the setup.
+**You can run the gate yourself**, and it is worth doing before you open a pull request. Write your
+own identifier list — it is a plain text file you author by hand, one entry per line, and it holds
+whatever *you* would not want to publish; the maintainer's list is private and is the one CI uses,
+but the gate does not care whose list it reads. `README.md` has the full setup under "Setting up a
+clone".
+
+⚠ **One caution the setup script does not announce loudly enough:** `install-gate.ps1` rewrites your
+clone's remote URL to HTTPS and installs a credential helper that reads your token from the `gh`
+keyring. That is fine on a clone you made for this, and surprising on one you use for other things.
+Read step 4 before you run it.
 
 ## Scope
 
