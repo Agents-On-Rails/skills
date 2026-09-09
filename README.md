@@ -34,7 +34,9 @@ own.
   a line to `<your-kb>/_serve/serve-log.jsonl` recording the time, **the full command line you
   typed**, and the id of every claim it returned. And it writes a small configuration directory
   under your local application data — created when you run `kb-capture init` or when a capture
-  first records a workspace, not merely by querying.
+  first records a workspace, not merely by querying. One more, only if you ask for it: `--as-of`
+  reconstructs the knowledge base as it stood at a past date, and materialises that snapshot into a
+  temporary directory outside both locations above.
 
 **The clipboard is emptied before it is written.** `aor-comm` clears the clipboard and then writes
 the new contents. If the write fails part-way, the clipboard is already empty — whatever was on it
