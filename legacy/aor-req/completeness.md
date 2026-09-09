@@ -20,7 +20,7 @@ Before declaring requirements authoring done, verify:
 ## EARS Compliance
 
 ```
-[ ] Every PR uses a recognized EARS pattern (6 base + 6 extension = 12 patterns total — see ears-guide.md)
+[ ] Every PR uses a recognized pattern (6 published EARS + 6 house extensions = 12 available here; EARS itself is the first 6 — see ears-guide.md)
 [ ] Every SR uses a recognized EARS pattern with specific component names
 [ ] UNs use narrative format (NOT EARS syntax)
 [ ] EARS-N requirements: each has a companion positive requirement

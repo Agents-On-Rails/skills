@@ -1,6 +1,6 @@
 ---
 name: aor-sme-requirements
-description: Reviews requirements for EARS syntax compliance (12 patterns), INCOSE/ISTQB quality attributes, cross-reference format, and UN-PR-SR-TC traceability
+description: Reviews requirements for EARS syntax compliance (6 published patterns plus 6 house extensions), INCOSE C1-C9 quality attributes, this bundle's T1-T10 test-case attributes, cross-reference format, and UN-PR-SR-TC traceability
 tools: Read, Grep, Glob
 ---
 
@@ -38,21 +38,26 @@ Do NOT return `fail` or `critical` for absence of requirements when the target w
 
 ## Evaluation Criteria
 
-### EARS Syntax Compliance (12 patterns)
+### EARS Syntax Compliance (6 published EARS patterns + 6 house extensions)
 
-Every PR and SR must use a recognized EARS pattern. UNs use narrative format (NOT EARS). TCs use Given/When/Then or procedural format.
+Every PR and SR must use a recognized pattern. UNs use narrative format (NOT EARS). TCs use Given/When/Then or procedural format.
 
-**Base patterns (5):**
+> **Published EARS is patterns 1-6 only.** Mavin et al. (RE'09) and the EARS originator's own
+> guidance define the five base patterns plus the complex combination. Patterns 7-12 below
+> are **this bundle's own extensions**, not published EARS, and no external source defines
+> them. Do not cite them as EARS to anyone outside this bundle.
+
+**Base patterns (5) — published EARS (Mavin et al., RE'09):**
 1. **Ubiquitous:** `The <system> shall <response>` — invariants, always-active behaviour
 2. **Event-Driven:** `When <trigger>, the <system> shall <response>` — most common
 3. **State-Driven:** `While <precondition>, the <system> shall <response>`
 4. **Optional:** `Where <feature included>, the <system> shall <response>`
 5. **Unwanted:** `If <unwanted event>, then the <system> shall <mitigation>` — reactive recovery
 
-**Complex combination:**
+**Complex combination — also published EARS:**
 6. **Complex:** `While <precondition>, when <trigger>, the <system> shall <response>`
 
-**Extension patterns (6):**
+**Extension patterns (6) — this bundle's own, NOT published EARS:**
 7. **EARS-N (Negative):** `WHEN/WHILE/IF <condition>, the <system> SHALL NOT <action>` — prohibition. Condition-first syntax. Discriminator: presence of "SHALL NOT" distinguishes from UNWANTED.
 8. **EARS-E (Complex Event):** `When <E1> AND <E2> within <window>, the <system> shall <response>` — correlated multi-event triggers
 9. **EARS-T (Temporal):** `When <event>, the <system> shall <response> WITHIN <time>` — time-bounded responses
@@ -84,7 +89,12 @@ Flag violations of these individual requirement quality attributes:
 | C8 | Correct | Requirement contradicts stated user need or design brief |
 | C9 | Conforming | Missing EARS pattern, missing traceability link, wrong cross-reference syntax |
 
-### Test Case Quality (ISTQB T1-T10)
+### Test Case Quality (T1-T10 — this bundle's own set)
+
+> **Not an ISTQB enumeration.** ISTQB's CTAL-TA syllabus §1.3.2 publishes *nine* quality
+> criteria for test cases, unnumbered, and `Atomic`, `Observable` and `Independent` are not
+> among them. The set below is informed by that guidance and by common unit-testing practice;
+> the `T`-numbering is local to this bundle.
 
 Flag violations of TC quality attributes:
 

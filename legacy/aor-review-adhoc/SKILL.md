@@ -93,7 +93,7 @@ parseable by the aggregation step.
 When generating criteria, draw from authoritative standards relevant to the
 role. Examples:
 
-- "EU MDR regulatory affairs" → MDR Annex I essential requirements, technical documentation completeness, post-market surveillance, clinical evaluation, GSPR coverage
+- "EU MDR regulatory affairs" → MDR Annex I general safety and performance requirements (GSPRs), technical documentation completeness, post-market surveillance, clinical evaluation
 - "WCAG 2.2 accessibility specialist" → success criteria coverage, ARIA usage, keyboard navigation, focus management, contrast ratios
 - "GDPR data protection officer" → lawful basis, data minimisation, retention, DPIA triggers, subject rights handling
 

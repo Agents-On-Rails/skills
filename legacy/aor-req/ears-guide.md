@@ -1,12 +1,19 @@
-# EARS Reference — Twelve Patterns
+# Requirement Pattern Reference — 6 published EARS patterns + 6 house extensions
+
+> **What is EARS and what is ours.** Patterns **1-6** are published EARS, defined by Mavin et
+> al. (RE'09) and by the EARS originator's own guidance. Patterns **7-12** are **this
+> bundle's own extensions**; no external source defines them, and they are not EARS. The
+> split is marked at each section heading below. When describing this material to anyone
+> outside the bundle, EARS has six patterns — not twelve.
 
 ## Requirement Strength
 
 - **shall** = mandatory (always use in EARS)
-- **shall not** = prohibition (EARS-N only)
+- **shall not** = prohibition (EARS-N only — a house extension; published EARS uses "shall
+  not" inside an existing pattern's response rather than defining a negative pattern)
 - should/will/may = NOT for EARS requirements
 
-## Base Patterns (Mavin et al., RE'09)
+## Base Patterns 1-6 — published EARS (Mavin et al., RE'09)
 
 ### 1. Ubiquitous (always active)
 
@@ -55,7 +62,10 @@ Prescribes a **mitigation action** in response to an undesirable event.
 While <precondition(s)>, when <trigger>, the <system name> shall <system response>
 ```
 
-## Extension Patterns
+## Extension Patterns 7-12 — this bundle's own, NOT published EARS
+
+> No external source publishes these six. The `EARS-` prefix is a local naming convention and
+> does not indicate they come from EARS. Do not cite them as EARS outside this bundle.
 
 ### 7. EARS-N — Negative (prohibition)
 

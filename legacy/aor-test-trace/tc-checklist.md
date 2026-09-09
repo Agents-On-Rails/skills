@@ -17,7 +17,14 @@ Before finalizing test cases for any SR, verify:
 [ ] Contract tests for all inter-service boundaries (when applicable)
 ```
 
-## ISTQB Quality Attributes (T1-T10)
+## Test Case Quality Attributes (T1-T10 — this bundle's own set)
+
+> **Not an ISTQB enumeration.** ISTQB's CTAL-TA syllabus §1.3.2 publishes *nine* quality
+> criteria for test cases, unnumbered — Correctness, Feasibility, Necessity,
+> Understandability, Traceability, Consistency, Precision, Completeness, Conciseness — and
+> frames them as maintainability guidance rather than a conformance checklist. `Atomic`,
+> `Observable` and `Independent` below are not among them, and the `T`-numbering is local to
+> this bundle. Cite ISTQB for its nine; cite this table as ours.
 
 Each TC must satisfy:
 

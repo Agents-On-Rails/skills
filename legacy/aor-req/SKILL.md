@@ -1,13 +1,14 @@
 ---
 name: aor-req
-description: Author User Needs (UN), Product Requirements (PR), and Software Requirements (SR) using EARS-12 patterns with full UN→PR→SR traceability.
+description: Author User Needs (UN), Product Requirements (PR), and Software Requirements (SR) using the 6 published EARS patterns plus 6 house extensions, with full UN→PR→SR traceability.
 allowed-tools: Read, Write, Edit, Grep, Glob, AskUserQuestion
 argument-hint: "[scope description, or path to source file]"
 ---
 
 # /aor-req — Requirements Authoring
 
-Drafts UN, PR, and SR following EARS-12 patterns, INCOSE C1-C9 quality
+Drafts UN, PR, and SR following the 6 published EARS patterns plus this bundle's
+6 extensions (`ears-guide.md` marks which is which), INCOSE C1-C9 quality
 attributes, and canonical cross-reference syntax. Output is markdown.
 
 > **Note on skills vs agents.** The AOR bundle contains *skills* at
@@ -101,7 +102,7 @@ See `templates.md` for format.
 For each UN, derive PRs:
 
 - Technology-agnostic, measurable, objective
-- EARS syntax (see `ears-guide.md` for the 12 patterns)
+- Pattern syntax (see `ears-guide.md` — 6 published EARS, 6 house extensions)
 - Each PR traces backward: `derived_from::PR->UN [UN-NNN]`
 - Each PR traces forward: `traces_to::PR->SR [SR-NNN]`
 - Every happy-path PR must have at least one If/Then (Unwanted) PR companion

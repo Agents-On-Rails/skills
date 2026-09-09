@@ -79,9 +79,10 @@ implementations that pass coarse-grained tests.
 
 ### Step 3: Verify TC quality
 
-Apply the TC drafting checklist in `tc-checklist.md`. Each TC must satisfy
-ISTQB T1-T10 (Correct, Complete, Feasible, Necessary, Traceable, Consistent,
-Precise, Atomic, Observable, Independent).
+Apply the TC drafting checklist in `tc-checklist.md`. Each TC must satisfy this
+bundle's T1-T10 (Correct, Complete, Feasible, Necessary, Traceable, Consistent,
+Precise, Atomic, Observable, Independent) — a local set informed by ISTQB's
+published test-case criteria, not an ISTQB enumeration. See `tc-checklist.md`.
 
 ### Step 4: Build the traceability matrix
 
