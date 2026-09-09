@@ -539,6 +539,31 @@ def load_workpaths():
     return out
 
 
+def gate1_signals_empty():
+    """True when gate 1 has NOTHING TO FIRE FROM -- every configured signal list is empty.
+
+    On a fresh install `init` writes the three state files without a `boundary:` section, so
+    `load_boundary()` returns empty lists and `load_workpaths()` returns []; the gate-1 legs
+    are then silent. That is the documented fail-SOFT adopter default (see `load_boundary`),
+    and R14 keeps those values operator-owned rather than shipping literals.
+
+    This function exists so the state can be REPORTED, never enforced. Turning an empty
+    signal set into a refusal would convert the documented fail-soft contract into a halt and
+    a first-run adopter could not capture anything at all (issue 41). Callers must only
+    advise on it."""
+    b = load_boundary()
+    return not any(b[k] for k in _BOUNDARY_KEYS) and not load_workpaths()
+
+
+def warn_gate1_unarmed():
+    """Advisory-only stderr line: gate 1 vetoed nothing because it has no signals to veto
+    with. Deliberately not a refusal -- see `gate1_signals_empty`."""
+    print("kb-boundary: ADVISORY -- gate 1 has no configured boundary signals, so it "
+          "vetoed nothing here; it did not check and then pass. Add work domains, owner "
+          "suffixes or work paths to arm it (okf-e-profile.md section 14, or "
+          "`kb-capture register-work-path`). This is not a refusal.", file=sys.stderr)
+
+
 def work_path_match(cwd: Path):
     """The registered work-path containing cwd (containment, reusing the SEC-001 idiom)."""
     cwd = cwd.resolve()
@@ -763,6 +788,8 @@ def enforce_workspace_policy(instance, cwd: Path, *, confirm_personal=False):
     if why:  # gate 1: live structural veto, independent of the registry
         die(f"workspace-policy HALT: work signal ({why}) -> personal refused -- {cwd} "
             "looks like work; work content must never reach personal GitHub (SEC-002 gate 1)")
+    if gate1_signals_empty():  # issue 41: advisory only, never a refusal
+        warn_gate1_unarmed()
     if choice is None:  # gate 2: choice + human confirm
         _unassigned_halt(cwd)
     if choice == "work":

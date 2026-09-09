@@ -1,6 +1,6 @@
 ---
 name: aor-kb-capture
-description: Record something you learned this session as a properly evidence-graded KB claim, routed safely to the personal or work instance. Thin wrapper over the OKF-E kb_capture CLI (fail-closed employer-boundary guard).
+description: Record something you learned this session as a properly evidence-graded KB claim, routed to the personal or work instance. Routing is fail-closed but it is not a boundary guarantee - it never reads the claim's content and cannot tell work knowledge from personal, it takes its signal from the working directory the command runs in, and its signal lists are empty until you fill them. Thin wrapper over the OKF-E kb_capture CLI.
 allowed-tools: Bash, AskUserQuestion
 argument-hint: "<personal|work> <kind> \"<claim>\" [how-known] [conf] [source]  |  help  |  (or just describe it in a sentence)"
 license: MIT

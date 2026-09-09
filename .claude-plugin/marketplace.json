@@ -19,7 +19,7 @@
     {
       "name": "aor-kb",
       "source": "./plugins/aor-kb",
-      "description": "Preview 0.x: evidence-graded knowledge-base skills for agents. Two skills: aor-kb-query, which searches a knowledge base and returns only claims that clear a trust grade, each stamped with its label; and aor-kb-capture, which records what a session learned as a graded claim behind a fail-closed employer-boundary guard.",
+      "description": "Preview 0.x: evidence-graded knowledge-base skills for agents. Two skills: aor-kb-query, which searches a knowledge base and returns only claims that clear a trust grade, each stamped with its label; and aor-kb-capture, which records what a session learned as a graded claim and routes it to a personal or a work knowledge base. Routing is fail-closed but it is not a boundary guarantee: it never reads the claim's content and cannot tell work knowledge from personal, it takes its signal from the working directory the command runs in, and its signal lists are empty until you fill them.",
       "category": "productivity",
       "keywords": ["knowledge-base", "claims", "evidence", "windows"]
     }
