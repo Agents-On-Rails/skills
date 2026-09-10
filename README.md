@@ -332,13 +332,13 @@ Pushes to `main` must raise the `version` of every plugin they touch; a tag must
 `<plugin>--v<version>`, match that plugin's manifest at the tagged commit and be reachable from
 `main`; non-fast-forward pushes to `main` and tag deletions are refused outside INCIDENT MODE.
 Two repository rulesets are the second lock: one on the default branch and one on all tags, each
-refusing deletion and non-fast-forward pushes. Note that these are **rulesets**, not classic branch
-protection, and the two APIs disagree in a way that will waste your time:
+refusing deletion and non-fast-forward pushes, **each with no bypass actors — so they bind the
+maintainer too.** Moving or deleting a published tag takes disabling a ruleset first, which is a
+deliberate and visible act rather than a quiet force-push. Note that these are **rulesets**, not
+classic branch protection, and the two APIs disagree in a way that will waste your time:
 `repos/.../branches/main/protection` returns **404 "Branch not protected"** while
 `repos/.../branches/main` returns **`protected: true`**. Both are accurate about their own question.
-Check `repos/.../rulesets`. Both rulesets allow organisation and repository admins to bypass them,
-so they guard against accident rather than against the maintainer; that matches the threat model
-stated below.
+Check `repos/.../rulesets`.
 
 ### On a hit
 
