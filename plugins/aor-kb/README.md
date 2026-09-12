@@ -8,6 +8,7 @@ never authority — only `- [kind] … {…}` list items are claims.
 |---|---|
 | `aor-kb-query` | Searches one KB and prints every matching claim **with its trust label**, so you never act on a weak, quarantined or stale claim by accident. Read-only. |
 | `aor-kb-capture` | Records what a session learned as a graded claim, behind a fail-closed boundary guard that binds the folder you are working in to exactly one KB. |
+| `aor-kb-setup` | Wires this machine to a KB you have already cloned: dependency check, config root, manifest entry, and the repo scaffold. It never creates a repository, commits, pushes, or registers a workspace. |
 
 ## Requirements
 
@@ -29,8 +30,19 @@ never authority — only `- [kind] … {…}` list items are claims.
 
 ## First run
 
-Neither tool works until a config root exists — the manifest is a fail-closed precondition. Create
-one:
+**The short path: run `/aor-kb:aor-kb-setup` from inside a clone of your KB repository.** It does
+everything below — checks the dependency, creates the config root, writes this machine's manifest
+entry, and scaffolds the repo if it is empty — and stops before committing anything, so you review
+the diff yourself. Run it once per KB.
+
+The long path, if you would rather do it by hand:
+
+**1. You need a KB repository, and nothing here creates one.** Create it on GitHub and clone it. It
+must be a git repo whose `origin` owner and `git config user.email` match what you put in the
+manifest below — both are checked on every call, and both fail closed.
+
+**2. Create the config root.** Neither tool works until it exists; the manifest is a fail-closed
+precondition.
 
 ```
 python <plugin-root>/tools/kb_capture.py init
@@ -38,12 +50,32 @@ python <plugin-root>/tools/kb_capture.py init
 
 `init` writes `instances.yml` from the shipped placeholder template, creates an empty workspace
 registry and an empty work-path list, and prints the directory it wrote them to. It is
-non-interactive and it never overwrites an existing manifest. Then point each instance in
-`instances.yml` at your own KB repository, and confirm the boundary check clears:
+non-interactive and it never overwrites an existing manifest.
+
+**3. Point an instance at your clone.** Edit `instances.yml` — `root`, `remote_owner` and `identity`
+for `work`, `personal`, or both. **Those two names are the only writable ones:** any other name is
+readable but refused on every write, because the boundary policy defines exactly two directions.
+
+**4. Give the repository the three files it needs.** These live in the KB repo, not here, and
+nothing in this plugin creates them:
+
+| File | Why |
+|---|---|
+| `.kb-lint.yml` at the repo root | Copy `<plugin-root>/.kb-lint.yml` and **set `instance:`** to match the manifest keyword. The shipped copy leaves it commented out on purpose — the template is not itself an instance — and without it every call fails closed. |
+| `kb/index.md` | The index the query tool reads. Frontmatter `okf_version: "0.1"`, then a `# kb index` heading. |
+| `kb/_serve/` in `.gitignore` | Every query appends to a serve-log under that directory. Without the rule it becomes a large tracked file that conflicts on every pull. |
+
+**5. Confirm it works:**
 
 ```
-python <plugin-root>/tools/kb_capture.py route --instance personal
+python <plugin-root>/tools/kb_query.py --instance personal
 ```
+
+Exit 0 is a pass — `served 0 of 0 claims` on a new KB means the whole destination check cleared. ⚠
+**Do not verify with `route`.** `route` is a write preflight, so it also applies the workspace
+policy, and it will refuse from a folder that has not yet chosen a KB — which is every folder on a
+fresh install, including your clone. That refusal is the workspace binding working, not a broken
+setup.
 
 The config root lives outside this plugin directory, because a package manager owns and replaces
 the plugin directory on every version bump. There is no environment variable to relocate it: one

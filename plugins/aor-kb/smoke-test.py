@@ -17,10 +17,9 @@ directory. So this file is deliberately small and deliberately about YOUR machin
 interpreter, the dependency, the config root, the Windows-only guard -- rather than about
 whether the knowledge-base logic is correct. That is what the source suites are for.
 
-The five assertions are specified in
-this file's own SMOKE-1 to SMOKE-4 markers, plus the
-Python floor, which the item-3 commit explicitly deferred to this file rather than to the
-dependency manifest.
+The six assertions are specified in this file's own SMOKE-1 to SMOKE-4 and SMOKE-6 markers,
+plus the Python floor (SMOKE-5), which the item-3 commit explicitly deferred to this file
+rather than to the dependency manifest. Six, counted from that list.
 """
 import argparse
 import os
@@ -47,10 +46,14 @@ QUERY = TOOLS / "kb_query.py"
 MIN_PYTHON = (3, 9)          # declared in plugin.json's description and both SKILL.md files
 
 failures = 0
+ran = 0          # derived, never written by hand: the summary below counts what ACTUALLY ran,
+                 # so adding a case cannot leave the total behind. It did once -- six cases
+                 # printed under a hardcoded "5 of 5".
 
 
 def check(cond, msg):
-    global failures
+    global failures, ran
+    ran += 1
     print(("PASS " if cond else "FAIL ") + msg)
     if not cond:
         failures += 1
@@ -87,6 +90,17 @@ for _name, _r in _help.items():
     if _r is not None and _r.returncode == 3:
         print("       %s exited 3: the pinned dependency is missing. Install it with:" % _name)
         print("       %s -m pip install -r %s" % (sys.executable, ROOT / "requirements.txt"))
+
+# SMOKE-6 -- every skill this plugin ships actually arrived. A packaging step that dropped a
+# skill folder produces an install that loads, reports enabled, and is missing a whole entry
+# point, with nothing else here noticing: SMOKE-1 exercises the TOOLS, and the tools are shared
+# by all three skills. Names rather than a count, so a dropped folder is named in the failure.
+_EXPECTED_SKILLS = ("aor-kb-query", "aor-kb-capture", "aor-kb-setup")
+_missing_skills = [n for n in _EXPECTED_SKILLS
+                   if not (ROOT / "skills" / n / "SKILL.md").is_file()]
+check(not _missing_skills,
+      "SMOKE-6: all three shipped skills are present -- %s. Three, counted from that list "
+      "[missing=%r]" % (", ".join(_EXPECTED_SKILLS), _missing_skills))
 
 with TemporaryDirectory() as _tmp:
     _tmp = Path(_tmp)
@@ -158,7 +172,7 @@ check(_p6.stdout.strip() == "RAISED",
 
 print()
 if failures:
-    print("RED -- %d of 5 checks failed. This install is not ready to use." % failures)
+    print("RED -- %d of %d checks failed. This install is not ready to use." % (failures, ran))
 else:
-    print("GREEN -- 5 of 5. The plugin runs on this machine.")
+    print("GREEN -- %d of %d. The plugin runs on this machine." % (ran, ran))
 sys.exit(1 if failures else 0)
