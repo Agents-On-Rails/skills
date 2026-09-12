@@ -218,6 +218,14 @@ _BOUNDARY_KEYS = ("work_domains", "work_owner_suffixes", "advisory_name_patterns
 REMOTE_RE = re.compile(
     r"^(?:ssh://)?(?:https?://)?(?:[^@/]+@)?(?P<host>[^:/]+)(?::\d+)?[:/]+(?P<owner>[^/]+)")
 CHOICES = ("work", "personal", "both")
+# #57, ruled 2026-09-12: the boundary defines exactly TWO WRITABLE directions, and every
+# literal-keyed guard in the policy below is written against that pair. The READ path is
+# deliberately NOT constrained by this -- the manifest stays the authority on what an
+# instance keyword is (kb_query's A5 note), a third instance remains readable, and
+# resolve_instance() is unchanged. Widening this tuple is not a one-line change: K7 prices
+# the rest (CHOICES has no value meaning "this folder feeds the third KB", so no folder can
+# be registered for it), so a third writable instance needs the dispatch wave, not an edit here.
+WRITABLE_INSTANCES = ("work", "personal")
 # Reparse tags that actually escape the boundary root on resolve(). Narrowed from "any
 # reparse tag" so a cloud-sync placeholder / AppExecLink dir (which resolve()s to
 # itself) is NOT dead-ended at registration -- only real junctions/symlinks are refused.
@@ -751,6 +759,22 @@ def _unassigned_halt(cwd: Path):
         f"and register it before any capture here can be saved{extra} (SEC-002)")
 
 
+def refuse_unwritable(instance):
+    """#57: HALT (exit 2) unless `instance` is one of the two writable directions.
+
+    The message must not claim the keyword is unrecognised -- kb-query resolves the same
+    keyword from the same manifest, and a refusal that contradicts the adjacent command
+    reads as a bug and gets worked around. It says readable-but-not-writable, names the
+    writable set, and says why."""
+    if instance not in WRITABLE_INSTANCES:
+        die(f"workspace-policy HALT: instance '{instance}' is READABLE but NOT WRITABLE -- "
+            f"the boundary policy defines exactly two writable directions "
+            f"{list(WRITABLE_INSTANCES)}, and a name outside them would travel the "
+            "irreversible direction without the guard built for that direction. "
+            "kb-query still reads it; making it writable means defining its direction "
+            "first, not adding a manifest entry (#57)")
+
+
 def enforce_workspace_policy(instance, cwd: Path, *, confirm_personal=False):
     """SEC-002. HALTS (exit 2) a workspace->instance mismatch. Asymmetric:
     work-direction flows; personal-direction is gated by a live work-signal veto
@@ -758,6 +782,14 @@ def enforce_workspace_policy(instance, cwd: Path, *, confirm_personal=False):
     human). Called BEFORE the destination check for the personal direction so the
     SEC-002 reason wins over a destination misconfig."""
     cwd = cwd.resolve()
+
+    # #57: refuse a non-writable keyword FIRST, before any folder-shaped reason is reported.
+    # Deliberately ahead of the gates rather than behind them: the keyword is unwritable from
+    # EVERY folder, so a gate-1 "this folder looks like work" refusal would name a condition
+    # the operator could change and still not get a write. Duplicated at
+    # resolve_instance_guarded on purpose -- this function is correct standalone, and that
+    # one refuses before the policy is entered at all.
+    refuse_unwritable(instance)
 
     # Component-2 override guard: any active KB_* override is announced LOUDLY, and the
     # irreversible personal direction FAILS CLOSED unless the caller explicitly acknowledges
@@ -813,5 +845,9 @@ def resolve_instance_guarded(instance, manifest, *, confirm_personal=False):
     if instance not in manifest:
         die(f"unknown --instance '{instance}' -- manifest instances: "
             f"{sorted(manifest)} (no default is permitted; §14.2.1)")
+    # #57: the WRITE door. Ordered after the membership check so a keyword that is in no
+    # manifest still gets the message that lists the manifest's own instances -- that one is
+    # actionable, this one is a policy statement.
+    refuse_unwritable(instance)
     enforce_workspace_policy(instance, Path.cwd(), confirm_personal=confirm_personal)
     return resolve_instance(instance, manifest)

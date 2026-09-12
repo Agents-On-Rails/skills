@@ -249,8 +249,21 @@ def cmd_init(args):
     if "work:" not in text or "personal:" not in text:
         die("init: the manifest names neither a work nor a personal instance -- refusing to "
             "report success on a file no boundary check could use")
+    # #57: this check only ever asked whether the two writable names were PRESENT, so it
+    # reported success on a manifest that also carried a third entry -- and init is the one
+    # command onboarding tells a new adopter to run. A third entry is legal (it is readable),
+    # so this REPORTS rather than refuses: reporting a correct-but-notable state with a
+    # non-error status is the point.
+    extra = [ln.split(":", 1)[0] for ln in text.splitlines()
+             if ln[:1].isalnum() and ":" in ln
+             and ln.split(":", 1)[0] not in kb_boundary.WRITABLE_INSTANCES
+             and ln.split(":", 1)[0] != "boundary"]
 
     print(f"config root: {root}")
+    if extra:
+        print(f"  NOTE: {', '.join(extra)} -- readable, but NOT writable. The boundary policy "
+              f"defines exactly two writable directions {list(kb_boundary.WRITABLE_INSTANCES)}; "
+              "kb-query can read these, and a capture to one is refused (#57).")
     print(f"  created: {', '.join(created) if created else '(nothing -- already initialised)'}")
     if kept:
         print(f"  kept:    {', '.join(kept)}")
