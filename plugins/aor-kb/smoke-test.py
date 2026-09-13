@@ -2,7 +2,7 @@
 """aor-kb smoke test -- does this install actually work on this machine?
 
 Run it once after installing the plugin. It takes a few seconds, touches nothing outside a
-temporary directory unless you ask it to, and tells you whether the two skills' tools can
+temporary directory unless you ask it to, and tells you whether the skills' tools can
 run here at all.
 
     python smoke-test.py                 # check an installed plugin
