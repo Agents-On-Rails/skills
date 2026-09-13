@@ -74,17 +74,32 @@ def load_config(path: Path):
         data = dirty_load(path.read_text(encoding="utf-8"), allow_flow_style=True).data
     except Exception as e:  # report type only (standing rule: never echo raw exc)
         die(f"config {path} failed to parse ({type(e).__name__})")
+    # #60: the required keys are read through _require, so a config that PARSES but omits one
+    # dies NAMING it at exit 2. They were read directly -- outside the try above -- so a
+    # hand-made .kb-lint.yml raised a bare KeyError traceback, contradicting this payload's
+    # own principle of exiting "naming exactly what is missing, rather than failing on an
+    # ImportError traceback", on a path the README now documents. Optional keys keep their
+    # .get() defaults and are deliberately NOT required.
+    def _require(dotted):
+        cur = data
+        for part in dotted.split("."):
+            if not isinstance(cur, dict) or part not in cur:
+                die(f"config {path} is missing required key '{dotted}' -- copy the shipped "
+                    ".kb-lint.yml template to your KB repo root and set instance: on the copy")
+            cur = cur[part]
+        return cur
+
     cfg = {
         "dir": path.parent,
-        "profile": data["profile"],
+        "profile": _require("profile"),
         "kb_path": data.get("kb_path", "kb/").strip("/"),
-        "kinds": data["enums"]["kind"],
-        "methods": data["enums"]["verified_by"],
-        "confs": data["enums"]["conf"],
-        "claim_keys": data["claim_keys"],
+        "kinds": _require("enums.kind"),
+        "methods": _require("enums.verified_by"),
+        "confs": _require("enums.conf"),
+        "claim_keys": _require("claim_keys"),
         "defaults_inheritable": data.get("defaults_inheritable", ["src"]),
         "status_enum": data.get("status_enum", []),
-        "id_format": re.compile(data["id_format"]),
+        "id_format": re.compile(_require("id_format")),
         "id_prefix": data.get("id_assign_prefix", "c-"),
         "reserved": data.get("reserved_files", ["index.md", "log.md"]),
         "ledger_type": data.get("ledger_type", "Ledger"),

@@ -15,7 +15,7 @@ The marketplace is named `aor`. Two plugins ship today, each as a `0.x` preview:
 | Plugin | Version | Skills | Needs |
 |---|---|---|---|
 | `aor-comm` | 0.1.4 | `aor-format-teams-message`: drafts a rich Microsoft Teams message and puts it on the clipboard ready to paste | Windows; Python 3.9 or later on PATH as `python` |
-| `aor-kb` | 0.1.5 | `aor-kb-query`: searches a knowledge base and returns only claims that clear a trust grade, each stamped with its label. `aor-kb-capture`: records what a session learned as a graded claim and routes it to a personal or a work base. Routing is fail-closed but **not a boundary guarantee** — it never reads the claim's content and cannot tell work knowledge from personal, it takes its signal from the working directory the command runs in, and its signal lists are empty until you fill them | Windows; Python 3.9 or later on PATH as `python`, plus the pinned `strictyaml` in the plugin's `requirements.txt` |
+| `aor-kb` | 0.1.5 | `aor-kb-query`: searches a knowledge base and returns only claims that clear a trust grade, each stamped with its label. `aor-kb-capture`: records what a session learned as a graded claim and routes it to a personal or a work base. Routing is fail-closed but **not a boundary guarantee** — it never reads the claim's content and cannot tell work knowledge from personal, it takes its signal from the working directory the command runs in, and its signal lists are empty until you fill them. `aor-kb-setup`: wires this machine to a knowledge base you have already cloned — dependency check, config root, manifest entry, repo scaffold — and never creates a repository, commits, pushes, or registers a workspace | Windows; Python 3.9 or later on PATH as `python`, plus the pinned `strictyaml` in the plugin's `requirements.txt` |
 
 ## Before you install
 
@@ -138,7 +138,7 @@ Inside a session the same steps are `/plugin marketplace add Agents-On-Rails/ski
 `/plugin install aor-comm@aor` or `/plugin install aor-kb@aor`.
 
 - **Name after install** — plugin skills are namespaced: `/aor-comm:aor-format-teams-message`,
-  `/aor-kb:aor-kb-query` and `/aor-kb:aor-kb-capture`.
+  `/aor-kb:aor-kb-query`, `/aor-kb:aor-kb-capture` and `/aor-kb:aor-kb-setup`.
 - **Transport** — the first command clones over SSH, so it needs an SSH key registered with GitHub.
   Without one, set `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` first and it clones over HTTPS.
 - **Updates** — Claude Code installs the version named in the plugin's manifest and updates only
