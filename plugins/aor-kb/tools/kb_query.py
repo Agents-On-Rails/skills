@@ -348,6 +348,14 @@ def main():
             f"({instance_root}) -- refusing to serve another knowledge base under that "
             "instance's name")
     cfg = kb_lint.load_config(cfg_path)
+    # The claims folder must be inside the instance too. load_config refuses a kb_path that names
+    # a folder outside the repository; a junction inside it that resolves outside is refused here.
+    if instance_root is not None:
+        claims_dir = (cfg["dir"] / cfg["kb_path"]).resolve()
+        if not claims_dir.is_relative_to(Path(instance_root).resolve()):
+            die(f"kb_path '{cfg['kb_path']}' of instance '{args.instance}' resolves to {claims_dir}, "
+                f"outside the instance root ({instance_root}) -- refusing to serve another folder "
+                "under that instance's name")
 
     if args.kind:
         args.kind = csv_arg(args.kind, cfg["kinds"], "kind")

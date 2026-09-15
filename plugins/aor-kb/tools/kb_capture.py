@@ -185,6 +185,11 @@ def topic_path(root: Path, topic: str, reserved, kb_path):
     # literal "kb" sent every capture into a folder a KB with any other kb_path never reads.
     fp = root / kb_path / t
     kb_root = (root / kb_path).resolve()
+    # load_config refuses a kb_path that NAMES a folder outside the repository; this is the case
+    # it cannot see -- a folder inside the repository that RESOLVES outside it, through a junction.
+    if not kb_root.is_relative_to(root.resolve()):
+        die(f"kb_path '{kb_path}' resolves to {kb_root}, outside the instance root {root} -- "
+            "refused (SEC-001)")
     if not fp.resolve().is_relative_to(kb_root):
         die(f"--topic '{topic}' resolves outside {kb_root} -- refused (SEC-001)")
     return fp

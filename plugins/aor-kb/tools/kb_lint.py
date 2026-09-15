@@ -89,10 +89,22 @@ def load_config(path: Path):
             cur = cur[part]
         return cur
 
+    # kb_path decides where a capture WRITES as well as what a query reads, now that every
+    # consumer honours it. A parent hop or an absolute path moved captures out of the repository
+    # the boundary had just verified, so a value that can name a folder outside the repository is
+    # refused here, once, for every consumer. A junction under the repository is invisible to a
+    # textual rule; each consumer that resolves the folder refuses that case itself.
+    kb_path_raw = str(data.get("kb_path", "kb/"))
+    kb_path = kb_path_raw.replace("\\", "/")
+    if (kb_path.startswith("/") or Path(kb_path).is_absolute() or Path(kb_path).drive
+            or ".." in Path(kb_path).parts or not kb_path.strip("/")):
+        die(f"config {path}: kb_path '{kb_path_raw}' must be a relative folder inside the "
+            "knowledge base repository -- no absolute path, no drive, no '..'")
+
     cfg = {
         "dir": path.parent,
         "profile": _require("profile"),
-        "kb_path": data.get("kb_path", "kb/").strip("/"),
+        "kb_path": kb_path.strip("/"),
         "kinds": _require("enums.kind"),
         "methods": _require("enums.verified_by"),
         "confs": _require("enums.conf"),
