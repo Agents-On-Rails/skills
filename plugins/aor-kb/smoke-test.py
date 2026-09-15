@@ -17,11 +17,12 @@ directory. So this file is deliberately small and deliberately about YOUR machin
 interpreter, the dependency, the config root, the Windows-only guard -- rather than about
 whether the knowledge-base logic is correct. That is what the source suites are for.
 
-The six assertions are specified in this file's own SMOKE-1 to SMOKE-4 and SMOKE-6 markers,
-plus the Python floor (SMOKE-5), which the item-3 commit explicitly deferred to this file
-rather than to the dependency manifest. Six, counted from that list.
+The seven assertions are specified in this file's own SMOKE-1 to SMOKE-4, SMOKE-6 and SMOKE-7
+markers, plus the Python floor (SMOKE-5), which the item-3 commit explicitly deferred to this
+file rather than to the dependency manifest. Seven, counted from that list.
 """
 import argparse
+import hashlib
 import os
 import subprocess
 import sys
@@ -63,6 +64,14 @@ def run(*cmd, **kw):
     return subprocess.run([sys.executable, *[str(c) for c in cmd]],
                           capture_output=True, text=True, encoding="utf-8",
                           errors="replace", timeout=120, **kw)
+
+
+def snapshot(root):
+    """relative path -> sha256 for every file under root, and '<dir>' for every folder, so a
+    new empty folder counts as a change too."""
+    return {p.relative_to(root).as_posix():
+            (hashlib.sha256(p.read_bytes()).hexdigest() if p.is_file() else "<dir>")
+            for p in sorted(root.rglob("*"))}
 
 
 ap = argparse.ArgumentParser(description="aor-kb install smoke test")
@@ -143,11 +152,23 @@ with TemporaryDirectory() as _tmp:
         '{id: c-smk1, v: ran-tool 2026-01-01, conf: high, src: "smoke-test.py"}\n',
         encoding="utf-8", newline="\n")
     if _profile.is_file():
-        _q = run(QUERY, _kb, "--no-log", "--quiet")
+        _before = snapshot(_tmp / "instance")
+        _q = run(QUERY, _kb, "--quiet")
         _served = [ln for ln in _q.stdout.splitlines() if ln.startswith("[")]
         check(_q.returncode == 0 and len(_served) == 1 and "c-smk1" in _served[0],
               "SMOKE-3: a one-claim knowledge base serves exactly that claim "
               "[rc=%s served=%d %r]" % (_q.returncode, len(_served), _served[:2]))
+
+        # SMOKE-7 -- a query is read-only on disk: the knowledge base holds exactly the same
+        # files, byte for byte, after the query as before it. Versions up to 0.1.6 appended
+        # every query's command line to a log inside the knowledge base; this is the check
+        # that no write of that kind has come back.
+        _after = snapshot(_tmp / "instance")
+        _changed = sorted(k for k in set(_before) | set(_after)
+                          if _before.get(k) != _after.get(k))
+        check(_q.returncode == 0 and not _changed,
+              "SMOKE-7: a query leaves the knowledge base unchanged [rc=%s changed=%r]"
+              % (_q.returncode, _changed))
 
 # SMOKE-4 -- P6's guard. The config root is resolved through Windows APIs that read the
 # process token; there is no environment-derived fallback, by design. So the module must

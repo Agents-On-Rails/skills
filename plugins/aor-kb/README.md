@@ -63,7 +63,7 @@ nothing in this plugin creates them:
 |---|---|
 | `.kb-lint.yml` at the repo root | Copy `<plugin-root>/.kb-lint.yml` and **set `instance:`** to match the manifest keyword. The shipped copy leaves it commented out on purpose — the template is not itself an instance — and without it every call fails closed. |
 | `kb/index.md` | The index the query tool reads. Frontmatter `okf_version: "0.1"`, then a `# kb index` heading. |
-| `kb/_serve/` in `.gitignore` | Every query appends to a serve-log under that directory. Without the rule it becomes a large tracked file that conflicts on every pull. |
+| `kb/_serve/` in `.gitignore` | Versions up to 0.1.6 logged every query under that directory. The query tool writes nothing there now; the rule keeps a clone shared with someone on an older version from tracking their log. |
 
 **5. Confirm it works:**
 
@@ -95,6 +95,11 @@ Computed from each claim's verification method, never stored:
 
 Retirement is a separate axis: `superseded` and `deprecated` claims are hidden unless you ask for
 `--history`. Never treat a quarantined, superseded or deprecated claim as current truth.
+
+## Upgrading from 0.1.6
+
+Older versions logged each query to `kb/_serve/` and took `--no-log`. 0.1.7 does neither: a script
+that passes `--no-log` now exits 2, and the `kb/_serve/` directory can be deleted.
 
 ## Not in this preview
 

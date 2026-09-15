@@ -983,7 +983,7 @@ def do_stats(cfg, files):
     q = sum(n for m, n in methods.items() if m in ("model-inferred", "unverified"))
     print(f"quarantine share (T3/T4 facts): {q}")
     print("n/a until P2+: first-commit failure rate (hook log), never-served claims "
-          "(serve-log)")
+          "(no serving record is kept)")
     return 0
 
 

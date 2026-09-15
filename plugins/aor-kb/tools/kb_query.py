@@ -29,21 +29,19 @@ claims are reachable only via --include-quarantined. Tier derivation:
 fact/procedure from the v: method; decision/lesson = T2 (attested by
 ratification / recurrence -- SS7's "computed from v: (and kind)").
 
-Serve-log (metric M1 reads it): append-only JSONL at
-<kb_path>/_serve/serve-log.jsonl in the real instance --
-{ts, query, served: [{id, label}]}. --no-log skips the append; all tests
-use it (M1-contamination guard). stdout carries served lines ONLY; the
-summary goes to stderr (--quiet suppresses it).
+Read path: a query writes nothing into any knowledge base, on every route --
+--instance, a path, or --config. Its only write is a temporary snapshot for
+--as-of, deleted, best effort, before it exits. stdout carries served lines
+ONLY; the summary goes to stderr (--quiet suppresses it).
 
 Exit codes: 0 query ran (zero served is not an error) - 2 usage/config error - 3 a required dependency is not installed.
 """
 
 import argparse
-import json
 import shutil
 import sys
 import tempfile
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 
 try:
@@ -266,17 +264,6 @@ def snapshot(cfg, cfg_path, asof, tmp):
     return kb_lint.load_config(root / ".kb-lint.yml")
 
 
-def log_serve(instance_cfg, argv, served):
-    p = (instance_cfg["dir"] / instance_cfg["kb_path"] / "_serve"
-         / "serve-log.jsonl")
-    p.parent.mkdir(parents=True, exist_ok=True)
-    entry = {"ts": datetime.now().astimezone().isoformat(timespec="seconds"),
-             "query": " ".join(argv) or "(default)",
-             "served": [{"id": kid, "label": label} for kid, label in served]}
-    with open(p, "a", encoding="utf-8", newline="\n") as fh:
-        fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
-
-
 def csv_arg(value, allowed, what):
     vals = [v.strip() for v in value.split(",") if v.strip()]
     for v in vals:
@@ -324,8 +311,6 @@ def main():
                     help="widen tiers to T3/T4 + lint-failing claims")
     ap.add_argument("--history", action="store_true",
                     help="admit superseded/deprecated/expired claims")
-    ap.add_argument("--no-log", action="store_true", dest="no_log",
-                    help="skip the serve-log append (tests use this)")
     ap.add_argument("--quiet", action="store_true",
                     help="suppress the stderr summary")
     args = ap.parse_args()
@@ -334,20 +319,34 @@ def main():
     # (boundary-checked, reusing kb_capture's fail-closed resolver) rather than letting
     # the cwd/path walk-up pick an instance -- so a query from a work dir can never
     # silently serve the wrong instance.
+    instance_root = None
     if args.instance:
         if args.paths:
             die("--instance and positional paths are mutually exclusive")
         import kb_boundary
-        root, _ = kb_boundary.resolve_instance(args.instance,
-                                               kb_boundary.load_manifest())
-        args.paths = [str(root / "kb")]
+        instance_root, _ = kb_boundary.resolve_instance(args.instance,
+                                                        kb_boundary.load_manifest())
 
-    start = Path(args.paths[0]).resolve() if args.paths else Path.cwd()
+    # Under --instance the config is found at the instance root, and the config names the
+    # claims directory (kb_path). Joining a literal "kb" here made any other kb_path
+    # unreachable through --instance, and passing that directory on as a positional path made
+    # --as-of refuse every --instance call.
+    if instance_root is not None:
+        start = Path(instance_root)
+    else:
+        start = Path(args.paths[0]).resolve() if args.paths else Path.cwd()
     if start.is_file():
         start = start.parent
     cfg_path = Path(args.config) if args.config else kb_lint.find_config(start)
     if not cfg_path or not cfg_path.is_file():
         die("no .kb-lint.yml found (walk-up from target; or pass --config)")
+    # Under --instance a --config must be that instance's own: one elsewhere would serve another
+    # knowledge base under this instance's name, after the destination check had cleared the
+    # instance -- the outcome --instance exists to rule out.
+    if instance_root is not None and cfg_path.resolve().parent != Path(instance_root).resolve():
+        die(f"--config {cfg_path} is not the .kb-lint.yml of instance '{args.instance}' "
+            f"({instance_root}) -- refusing to serve another knowledge base under that "
+            "instance's name")
     cfg = kb_lint.load_config(cfg_path)
 
     if args.kind:
@@ -361,7 +360,6 @@ def main():
         die(f"--min-conf '{args.min_conf}' not in GRADE-4 {cfg['confs']}")
     rank = {v: i for i, v in enumerate(cfg["confs"])}  # index 0 = highest
 
-    instance_cfg = cfg  # the serve-log always lands in the REAL instance
     tmp = None
     try:
         if args.as_of:
@@ -417,8 +415,6 @@ def main():
         if tmp:
             shutil.rmtree(tmp, ignore_errors=True)
 
-    if not args.no_log:
-        log_serve(instance_cfg, sys.argv[1:], served)
     if not args.quiet:
         print(f"kb-query: served {len(served)} of {len(claims)} claims "
               f"({nfiles} files)", file=sys.stderr)

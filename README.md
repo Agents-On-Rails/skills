@@ -30,13 +30,13 @@ own.
   `capabilities.json`, its own manifest, read from its install directory on every render. It writes
   nothing to disk at all, and it replaces the clipboard.
 - **`aor-kb`** reads and writes a knowledge base you point it at. Two things worth knowing before
-  you install it. **A query is logged by default:** unless you pass `--no-log`, each query appends
-  a line to `<your-kb>/_serve/serve-log.jsonl` recording the time, **the full command line you
-  typed**, and the id of every claim it returned. And it writes a small configuration directory
-  under your local application data — created when you run `kb-capture init` or when a capture
-  first records a workspace, not merely by querying. One more, only if you ask for it: `--as-of`
-  reconstructs the knowledge base as it stood at a past date, and materialises that snapshot into a
-  temporary directory outside both locations above.
+  you install it. **A query writes nothing into the knowledge base** — versions up to 0.1.6 logged
+  each query there, and the plugin's README says what that leaves behind. And it writes a small
+  configuration directory under your local application data — created when you run
+  `kb-capture init` or when a capture first records a workspace, not merely by querying. One more,
+  only if you ask for it: `--as-of` reconstructs the knowledge base as it stood at a past date, and
+  materialises that snapshot into a temporary directory outside both the knowledge base and that
+  configuration directory.
 
 **The clipboard is emptied before it is written.** `aor-comm` clears the clipboard and then writes
 the new contents. If the write fails part-way, the clipboard is already empty — whatever was on it

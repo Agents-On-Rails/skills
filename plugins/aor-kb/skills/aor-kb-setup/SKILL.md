@@ -147,9 +147,9 @@ A KB repo needs three things this plugin does not create. Add only the ones abse
   ---
   # kb index
   ```
-- **`.gitignore`** — append `kb/_serve/` if not already ignored. The query tool appends a serve-log
-  under that directory on every read, so without the rule each person's queries produce a growing
-  tracked file that conflicts on every pull.
+- **`.gitignore`** — append `kb/_serve/` if not already ignored. The query tool writes nothing into
+  the KB, but versions up to 0.1.6 logged every query under that directory, so the rule keeps a clone
+  shared with anyone still on an older version from tracking their log.
 
 **Someone joining an existing KB will find all three present — that is the expected outcome, not a
 failure.** Say so rather than reporting "nothing to do" as if something went wrong.
@@ -199,7 +199,7 @@ aor-kb-setup — wire this machine to a knowledge base you have already cloned.
 
 WHAT IT DOES  Checks the dependency, creates the config root, writes this machine's instances.yml
               entry for ONE instance, and scaffolds the KB repo if it is missing .kb-lint.yml,
-              kb/index.md, or a .gitignore rule for the serve-log. Then it verifies the boundary
+              kb/index.md, or a .gitignore rule for kb/_serve/. Then it verifies the boundary
               check clears and tells you how to register a project folder.
 WHAT IT NEVER Creates a repository. Commits. Pushes. Calls gh. Registers a workspace for you.
 DOES          Writes any instance name other than work or personal.

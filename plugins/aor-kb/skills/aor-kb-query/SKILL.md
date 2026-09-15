@@ -44,8 +44,8 @@ stop — do not guess an alternative interpreter or path.
    - `--min-conf` high|moderate|low|very-low — a floor; drops lower grades (facts/procedures only)
    - `--min-seen N` — recurrence floor, the natural **lesson** filter (lessons carry no confidence)
    - `--tier` T1|T2|T3|T4 · `--scope <tag>` · `--fresh` (hide stale)
-   - reveal: `--include-quarantined` (T3/T4) · `--history` / `--as-of <rev>` (retired versions)
-3. **Run it** (do NOT pass `--no-log` — a real query is a legitimate M1 serve event):
+   - reveal: `--include-quarantined` (T3/T4) · `--history` / `--as-of <date>` (retired versions)
+3. **Run it:**
    ```
    <PY> <QUERY> --instance <personal|work> [flags]
    ```
@@ -68,7 +68,7 @@ USAGE         aor-kb-query [personal|work] [what you're looking for]     (instan
                        --tier T1|T2|T3|T4                      filter by trust tier directly
                        --scope <area>   --fresh                --fresh hides stale claims
               reveal:  --include-quarantined      show T3/T4 (model-inferred, unverified) claims
-                       --history / --as-of <rev>   show superseded & deprecated (retired) versions
+                       --history / --as-of <date>  show superseded & deprecated (retired) versions
 TRUST TIERS   computed from each claim's verification method (v:), never stored:
                 T1 verified    ran-tool · read-primary-source      served by default
                 T2 attested    author-asserted                     served by default (weaker)
