@@ -340,10 +340,12 @@ def main():
     cfg_path = Path(args.config) if args.config else kb_lint.find_config(start)
     if not cfg_path or not cfg_path.is_file():
         die("no .kb-lint.yml found (walk-up from target; or pass --config)")
-    # Under --instance a --config must be that instance's own: one elsewhere would serve another
-    # knowledge base under this instance's name, after the destination check had cleared the
-    # instance -- the outcome --instance exists to rule out.
-    if instance_root is not None and cfg_path.resolve().parent != Path(instance_root).resolve():
+    # Under --instance a --config must be the instance's own .kb-lint.yml -- the file the
+    # destination check read. One elsewhere would serve another knowledge base under this
+    # instance's name, and a second file in the same root could serve it under other rules, after
+    # the destination check had cleared the instance: the outcome --instance exists to rule out.
+    if (instance_root is not None
+            and cfg_path.resolve() != (Path(instance_root) / ".kb-lint.yml").resolve()):
         die(f"--config {cfg_path} is not the .kb-lint.yml of instance '{args.instance}' "
             f"({instance_root}) -- refusing to serve another knowledge base under that "
             "instance's name")

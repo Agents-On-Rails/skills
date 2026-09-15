@@ -401,7 +401,7 @@ def cmd_add(args, manifest):
         # its defaults:{src}), against the REAL corpus (L7 supersession targets + L8 id
         # uniqueness resolve). A stub/throwaway context would false-fail inherited-src facts
         # and false-pass id collisions -- the exact dry-run != write divergence T8 is about.
-        # Nothing is written: no kb/ file, no index refresh, no HEAD move.
+        # Nothing is written: no file under kb_path, no index refresh, no HEAD move.
         # SCOPE (panel #2 arch#1): this preview is CORPUS-scoped and equals the write verdict
         # for L1-L6 + same-file L7/L8. CROSS-file L7/L8 diverge from today's [fp]-scoped
         # write lint (apply_fixes) and staged-scoped hook -- both directions fail closed;
@@ -437,7 +437,7 @@ def cmd_add(args, manifest):
           f"(instance '{args.instance}', boundary OK)")
     # id assignment + lint on the touched file (reuse kb_lint's fix+check machinery)
     rc = kb_lint.apply_fixes(cfg, [fp], do_format=True, quiet=args.quiet)
-    # P4 (a2): keep the infuse artifact (kb/index.md) current after every capture. Lives in
+    # P4 (a2): keep the infuse artifact (<kb_path>/index.md) current after every capture. Lives in
     # kb_lint so it reuses the linter's reserved-file set + claim predicate (ARCH-004).
     idx = kb_lint.refresh_index(cfg)
     if not args.quiet:
@@ -716,7 +716,8 @@ def main():
     p_add = sp.add_parser("add", help="append one boundary-checked claim + lint")
     p_add.add_argument("--instance", required=True,
                        help="work|personal -- REQUIRED, no default (§14.2.1)")
-    p_add.add_argument("--topic", required=True, help="kb/ topic file (slug or path)")
+    p_add.add_argument("--topic", required=True,
+                       help="topic file under the instance's kb_path (slug or path)")
     p_add.add_argument("--kind", required=True)
     p_add.add_argument("--text", required=True, help="claim text (no brace)")
     for k in ("v", "conf", "src", "seen", "confirmed", "status", "date", "until",

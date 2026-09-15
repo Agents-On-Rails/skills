@@ -198,12 +198,12 @@ gh skill install Agents-On-Rails/skills aor-format-teams-message --agent claude-
 have meant. Substitute `--agent github-copilot` for Copilot, or drop `--scope user` to install into
 the current repository instead of your home directory.
 
-**Do not install `aor-kb-query` or `aor-kb-capture` this way — install `aor-kb` as a plugin
-instead** (`claude plugin install aor-kb@aor` or `copilot plugin install aor-kb@aor`, above).
+**Do not install `aor-kb-query`, `aor-kb-capture` or `aor-kb-setup` this way — install `aor-kb` as
+a plugin instead** (`claude plugin install aor-kb@aor` or `copilot plugin install aor-kb@aor`, above).
 ⚠ **The installer will offer them to you anyway**: they are declared in the marketplace manifest, so
-`--list` shows all three skills and an install of either will appear to succeed. It does not. A
-skill-level install delivers a skill's own folder and nothing above it. Both `aor-kb` skills share
-their `tools/`, `requirements.txt` and `instances.yml.example` at the **plugin** root, so a
+`--list` shows all three skills and an install of any of them will appear to succeed. It does not. A
+skill-level install delivers a skill's own folder and nothing above it. All three `aor-kb` skills
+share their `tools/`, `requirements.txt` and `instances.yml.example` at the **plugin** root, so a
 skill-level install places a `SKILL.md` whose tool is not there. **It looks like it worked**: the
 command exits 0, prints no warning, and writes exactly one file. `aor-format-teams-message` keeps
 its tool beside its own `SKILL.md`, which is why it installs cleanly this way.
@@ -243,8 +243,8 @@ npx skills add Agents-On-Rails/skills --skill aor-format-teams-message -a claude
 `claude-code` — `-a claude` is rejected. Add `-y` to skip the prompts entirely, and `-g` to install
 globally rather than into the current project.
 
-**Do not install `aor-kb-query` or `aor-kb-capture` this way either** — same reason as the
-`gh skill` section above, and the same successful-looking one-file result. `--list` will show all
+**Do not install `aor-kb-query`, `aor-kb-capture` or `aor-kb-setup` this way either** — same reason
+as the `gh skill` section above, and the same successful-looking one-file result. `--list` will show all
 three skills here too. Install `aor-kb` as a plugin.
 
 - **Name after install** — the bare skill name. With `-a claude-code` it lands in
