@@ -57,8 +57,9 @@ stop — do not guess an alternative interpreter or path.
 aor-kb-query — search your evidence-graded KB and get back only trustworthy claims, each with its trust label.
 
 WHAT IT DOES  Reads ONE KB (personal or work), filters to what you ask for, and prints every matching
-              claim WITH its trust label — so you never act on a weak, quarantined, or stale claim by
-              accident. Only "- [kind] … {…}" list items are claims; surrounding prose is never authority.
+              claim WITH its trust label, which says how the claim is known. The label informs; it does
+              not stop you acting on a weak or stale claim. Only "- [kind] … {…}" list items are
+              claims; surrounding prose is never authority.
 WHEN TO USE   at the start of a task ("what do we know about X?") or any time you'd otherwise guess.
               Prefer it over reading raw files — it filters and labels for you.
 USAGE         aor-kb-query [personal|work] [what you're looking for]     (instance defaults to personal; read-only)
@@ -76,7 +77,13 @@ TRUST TIERS   computed from each claim's verification method (v:), never stored:
                 T4 quarantined unverified                          hidden unless --include-quarantined
               Retired by status (separate axis): superseded / deprecated — hidden unless --history / --as-of.
               Never treat a quarantined, superseded, or deprecated claim as current truth.
-LABEL FORMAT  [kind | v-method date | conf-or-QUARANTINED | id | status?] claim text (src: …)
+LABEL FORMAT  [kind|basis|conf|id|flag] claim text (src: …)   the tier names above are NOT printed
+                basis  fact/procedure: v: method + date (the method gives the tier) · decision:
+                       status + date · lesson: seen N, confirmed <date> (decisions, lessons = T2)
+                conf   grade, or - if none · QUARANTINED for T3/T4 · QUARANTINED:<check> for any
+                       lint finding, a fixable one included
+                flag   retired or expired only: SUPERSEDED-BY: <id> · DEPRECATED: <reason> ·
+                       EXPIRED: <date>. A file past its review date is unflagged; --fresh hides it.
 EXAMPLES      aor-kb-query work --kind decision "release branch"
               aor-kb-query personal --kind lesson --min-seen 2
               aor-kb-query work --kind fact --min-conf moderate --include-quarantined

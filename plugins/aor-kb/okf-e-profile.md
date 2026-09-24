@@ -247,8 +247,11 @@ with `superseded-by:`) · `deprecated` (never-true, with mandatory `reason:` —
 others know not to re-add) · `promoted` (a lesson lifted to the always-on layer, with
 `promoted-to:`). A claim that carries `superseded-by:` reads `status: superseded`, whatever
 it read before — the transition is entailed by the link and is **fixable** (`promoted-to:`
-stays); a `deprecated` claim and a claim another claim already supersedes are never supersede
-targets (gating, on the linking claim). Retire, never delete: a deleted claim that anything links to breaks L7,
+stays) — unless that link is itself refused, or the claim is `deprecated`. A `deprecated`
+claim is never a supersede target, even when both links are already in place, and never
+carries `superseded-by:` itself: a tombstone has no successor. A claim another claim already
+supersedes is never a supersede target either, whether or not it carries that back-link yet.
+Each of these gates on the claim that carries the link. Retire, never delete: a deleted claim that anything links to breaks L7,
 so silent deletion of any *linked* claim is structurally impossible. Physical deletion is
 reserved for content that should never have existed (secrets — which also triggers key
 rotation).

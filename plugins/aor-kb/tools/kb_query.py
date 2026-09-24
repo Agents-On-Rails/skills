@@ -189,9 +189,11 @@ def topic_names(relpath, kb_path):
 
 def passes(c, tr, taint, lc, args, tiers, rank, fmeta, today, topics=None):
     # A4: --topic filters HERE, in the serve loop, and never by narrowing the
-    # collected path set. taint and the L7/L8 corpus checks are corpus-scoped, so
-    # narrowing paths changes which claims come back QUARANTINED -- a subject filter
-    # that silently altered trust derivation would be worse than having none.
+    # collected path set. Since R3 an OUTGOING link from the narrowed files resolves
+    # corpus-wide, but a finding raised by a link INTO them from outside is still never
+    # computed, so narrowing paths can still change which claims come back QUARANTINED
+    # (or retired) -- a subject filter that silently altered trust derivation would be
+    # worse than having none.
     if topics is not None and c.file not in topics:
         return False
     if args.kind and c.kind not in args.kind:
