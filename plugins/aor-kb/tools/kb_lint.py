@@ -18,6 +18,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from collections import Counter
 from datetime import date
 from pathlib import Path
 
@@ -874,11 +875,19 @@ def run_git(cwd, *args):
     return r.returncode, r.stdout
 
 
+def corpus_files(cfg):
+    """Every .md under kb_path, from disk -- or none when that directory does not exist yet. A
+    first capture into a new instance creates it, so a missing corpus is an EMPTY one, never a
+    halt (A6 of the 2026-09-24 build review: resolving corpus-wide had made collect_files'
+    "no such path" fire before the append that creates the directory)."""
+    return collect_files(cfg, []) if (cfg["dir"] / cfg["kb_path"]).exists() else []
+
+
 def default_pool(cfg, files):
     """The resolution pool a check uses unless told otherwise: every corpus file the caller
     did not name, read from disk (ruling R3: resolve corpus-wide in every check)."""
     named = {Path(f).resolve() for f in files}
-    return [(f, None) for f in collect_files(cfg, []) if f.resolve() not in named]
+    return [(f, None) for f in corpus_files(cfg) if f.resolve() not in named]
 
 
 def index_pool(cfg, files):
@@ -976,12 +985,14 @@ def new_id(cfg, taken):
 FORMAT_WIDTH = 100
 
 
-def format_pass(cfg, files):
+def format_pass(cfg, files, run=None):
     """F4 normalizer (P2): move an overlong INLINE brace to its own indented
     line (the grammar's continuation form). Multi-line braces are already in
     continuation form and are left alone. Idempotent: a brace alone on its
-    line is never touched again."""
-    _, claims, _ = run_checks(cfg, files)
+    line is never touched again. Writes go through the run, so `wrote:` names
+    them too (A8). Returns the number of braces reflowed in files written."""
+    run = run or FixRun(cfg)
+    _, claims, _ = run_checks(cfg, files, resolve=[])   # the named files' claims are all it needs
     by_file = {}
     for c in claims:
         if not c.brace_open or c.brace_open[0] != c.brace_close[0]:
@@ -992,7 +1003,7 @@ def format_pass(cfg, files):
     for relpath, items in by_file.items():
         p = cfg["dir"] / relpath
         lines = p.read_text(encoding="utf-8").split("\n")
-        edited = False
+        n = 0
         for ln, col in sorted(items, key=lambda t: -t[0]):
             raw = lines[ln - 1]
             head = raw[:col].rstrip()
@@ -1000,10 +1011,9 @@ def format_pass(cfg, files):
                 continue  # short enough, or brace already alone on its line
             lines[ln - 1] = head
             lines.insert(ln, "  " + raw[col:].rstrip())
-            edited = True
-            changed += 1
-        if edited:
-            p.write_text("\n".join(lines), encoding="utf-8", newline="\n")
+            n += 1
+        if n and run.write(relpath, "\n".join(lines)):
+            changed += n
     return changed
 
 
@@ -1023,7 +1033,7 @@ def corpus_ids(cfg):
     cross-file supersede half-linked, the old claim quarantined and never labelled.
     """
     ids = set()
-    for f in collect_files(cfg, []):
+    for f in corpus_files(cfg):
         try:
             text = f.read_text(encoding="utf-8")
         except OSError:
@@ -1036,19 +1046,21 @@ def corpus_ids(cfg):
 
 class FixRun:
     """What one fix run wrote, and whether it may write. Every write goes through write(),
-    so `wrote` holds exactly the files whose bytes this run changed, and `refused` the claims
-    the editor would not touch because their live brace already carries the key with another
-    value (A1 of the 2026-09-24 build review)."""
+    so `wrote` holds exactly the files whose bytes this run changed -- the format pass's too
+    (A8 of the 2026-09-24 build review) -- `pre` each written file's text from before the run
+    (A5), and `refused` the claims the editor would not touch because their live brace already
+    carries the key with another value (A1)."""
 
     def __init__(self, cfg):
         self.cfg = cfg
-        self.wrote, self.refused = set(), []
+        self.wrote, self.pre, self.refused = set(), {}, []
 
     def write(self, relpath, text):
         p = self.cfg["dir"] / relpath
         old = p.read_text(encoding="utf-8") if p.is_file() else None
         if old == text:
             return False
+        self.pre.setdefault(relpath, old)
         p.write_text(text, encoding="utf-8", newline="\n")
         self.wrote.add(relpath)
         return True
@@ -1094,18 +1106,59 @@ def apply_fixes(cfg, files, do_format=False, quiet=False, resolve=None, announce
             slot["status"] = "superseded"
     _apply_claim_edits(cfg, claim_edits, run)
     if do_format:
-        n = format_pass(cfg, files)
+        n = format_pass(cfg, files, run)
         if not quiet:
             print(f"format: {n} brace(s) reflowed to the indented-brace form "
                   f"(width {FORMAT_WIDTH})")
     if not quiet or announce:
         for rel in sorted(wrote):
             print(f"wrote: {rel}")
+    introduced = _introduced(cfg, run, files, resolve)
+    for rel, found in introduced:
+        print(f"kb-lint: this fix run introduced a gating error into {rel}, a file it followed a "
+              "link into -- the run fails; fix what is named, then run `kb-lint fix` again:",
+              file=sys.stderr)
+        for e in found:
+            print(f"  {rel}:{e.line}  {e.check}  {e.msg}", file=sys.stderr)
     errs, claims, nfiles = run_checks(cfg, files, resolve=resolve)
     if not quiet:
         print("fix: done; re-check follows")
     rc = report(errs, claims, nfiles, quiet=quiet)
-    return 1 if run.refused else rc
+    return 1 if (run.refused or introduced) else rc
+
+
+def _introduced(cfg, run, files, resolve):
+    """[(relpath, [Err])] for every file this run wrote that the caller did not name -- a file
+    it followed a link into -- where THIS run introduced a gating finding (A5, stated default S2
+    of the 2026-09-24 build review). The file is checked twice, as it stood before the run and
+    as it stands now, each against the rest of the corpus at the same moment, and the gating
+    findings are compared as (check, message) multisets, so a finding that only moved lines is
+    not new. An error that was already there stays unsurfaced: R3 keeps the gate on the named
+    files, and that is not reopened."""
+    named = {Path(f).resolve() for f in files}
+    before_ov = {cfg["dir"] / rel: text for rel, text in run.pre.items() if text is not None}
+    out = []
+    for rel in sorted(run.wrote):
+        p = cfg["dir"] / rel
+        if p.resolve() in named:
+            continue
+        pool = None if resolve is None else (
+            [(q, t) for q, t in resolve if Path(q).resolve() != p.resolve()]
+            + [(f, None) for f in files])
+        before, _, _ = run_checks(cfg, [p], overrides=before_ov, resolve=pool)
+        after, _, _ = run_checks(cfg, [p], resolve=pool)
+        seen = Counter((e.check, e.msg) for e in before if e.cls == "G" and e.file == rel)
+        found = []
+        for e in after:
+            if e.cls != "G" or e.file != rel:
+                continue
+            if seen[(e.check, e.msg)]:
+                seen[(e.check, e.msg)] -= 1
+            else:
+                found.append(e)
+        if found:
+            out.append((rel, found))
+    return out
 
 
 def _brace_field_span(c, key):
