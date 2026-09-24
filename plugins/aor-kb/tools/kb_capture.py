@@ -35,8 +35,10 @@ Grade floor (§14.2.6 + §14.5 honesty gate): capture is a RECORDER, not a verif
 writes quarantine grades (v: unverified / model-inferred) plus author-asserted freely;
 the verified grades ran-tool / read-primary-source require --verified-in-session (the
 operator affirming the act happened this session). Upgrades otherwise need a later real
-v-event. Exit codes: 0 ok (3 = a required dependency is not installed) - 1 lint gating (after a write, or a --dry-run candidate that
-fails the real lint) - 2 usage/routing/boundary HALT.
+v-event. Exit codes: 0 ok (3 = a required dependency is not installed) - 1 lint gating, in one of two
+cases the output names: REFUSED before the append (nothing written; also a --dry-run candidate that
+fails the real lint), or WROTE and then the post-append fix pass failed on a named file - 2 usage/
+routing/boundary HALT, including a double quote in a brace value.
 """
 
 import argparse
@@ -118,6 +120,20 @@ def reject_control_chars(name, value):
             f"One capture writes exactly ONE claim line; an embedded newline would append "
             f"further claims -- carrying grades no gate inspected. Re-run with the value on a "
             f"single line.")
+
+
+def reject_double_quote(name, value):
+    """Operator ruling OR5 (2026-09-24): refuse a double quote in any value rendered INTO THE
+    BRACE, before anything is written. The grammar cannot represent a quote inside a quoted
+    value (see _q), so `--src 'x", supersedes: "<an id>'` rendered as a second KEY inside one
+    line -- which lints clean, and on 0.1.8's corpus-wide fix silently retired a claim in another
+    file (the build review's V4). SEC-PC-006's guard is about control characters and does not
+    cover it. Escaping instead would be a grammar change. The claim text is not a brace value:
+    a quote in prose is inert, because the parser finds the brace scanning back from its end."""
+    if value is not None and '"' in str(value):
+        die(f"{name}: a double quote is not allowed in a brace value -- the brace grammar cannot "
+            "hold one inside a quoted value, and one outside a quoted value would start a new "
+            "key. Rephrase without it (single quotes are fine). Nothing was written.")
 
 
 def build_brace(fields):
@@ -403,6 +419,8 @@ def cmd_add(args, manifest):
     reject_control_chars("--topic", args.topic)
     for _k, _v in fields:
         reject_control_chars(f"--{_k}", _v)
+    for _k, _v in fields:                # OR5: no quote-break key injection through a brace value
+        reject_double_quote(f"--{_k}", _v)
     brace = build_brace(fields)
     fp = topic_path(root, args.topic, cfg["reserved"], cfg["kb_path"])
     line = f"- [{args.kind}] {args.text}" + (f" {brace}" if brace else "")
@@ -426,7 +444,8 @@ def cmd_add(args, manifest):
     # so a supersede across topic files is a normal write, not a sticky error. An earlier
     # comment here recorded the opposite intent ("keep FIX and GATE on the touched set");
     # the 2026-09-23 panel traced that shape to a half-linked corpus and it was ruled out.
-    errs, claims, nfiles, _cand = preview_lint(cfg, fp, line)
+    errs, claims, nfiles, cand = preview_lint(cfg, fp, line)
+    rel = fp.relative_to(root).as_posix()
     if args.dry_run:
         created = "new file" if not fp.is_file() else "append"
         print(f"[dry-run] {args.instance} -> {fp} ({created})")
@@ -438,23 +457,55 @@ def cmd_add(args, manifest):
                   "[dry-run] candidate FAILS the real lint -- the write would be REFUSED the "
                   "same way, writing nothing")
         return rc
-    if any(e.cls == "G" for e in errs):
+    gating = [e for e in errs if e.cls == "G"]
+    if gating:
         kb_lint.report(errs, claims, nfiles, quiet=False)
-        print(f"REFUSED -- the claim would not lint (the gating line above says why); "
-              f"NOTHING was written to {fp.relative_to(root).as_posix()}", file=sys.stderr)
+        relf = fp.resolve().relative_to(Path(cfg["dir"]).resolve()).as_posix()
+        cand_ln = cand.rstrip("\n").count("\n") + 1
+        print(f"REFUSED -- NOTHING was written to {rel}. "
+              + gating_account(gating, claims, relf, cand_ln, rel), file=sys.stderr)
         return 1
 
     created = append_claim(fp, line, cfg["profile"])
-    print(f"wrote {'new ' if created else ''}{fp.relative_to(root).as_posix()} "
-          f"(instance '{args.instance}', boundary OK)")
+    print(f"wrote {'new ' if created else ''}{rel} (instance '{args.instance}', boundary OK)")
     # id assignment + lint on the touched file; the fix follows a link into another file
-    rc = kb_lint.apply_fixes(cfg, [fp], do_format=True, quiet=args.quiet)
+    outcome = {}
+    rc = kb_lint.apply_fixes(cfg, [fp], do_format=True, quiet=args.quiet, outcome=outcome)
     # P4 (a2): keep the infuse artifact (<kb_path>/index.md) current after every capture. Lives in
     # kb_lint so it reuses the linter's reserved-file set + claim predicate (ARCH-004).
     idx = kb_lint.refresh_index(cfg)
     if not args.quiet:
         print(f"refreshed {idx.relative_to(root).as_posix()}")
+    if rc:
+        # A11 (S3): exit 1 after a write is a different case from a refusal, and says so
+        failed = ", ".join(outcome.get("failed") or []) or "a file named above"
+        print(f"WROTE {rel} -- the claim is on disk; then the fix pass failed on {failed} (the "
+              "lines above say why). Exit 1 here means written, and the knowledge base needs that "
+              "fixed before it will commit.", file=sys.stderr)
     return rc
+
+
+def gating_account(gating, claims, relf, cand_ln, rel):
+    """Who gates, for the REFUSED line (A11, stated default S3 of the 2026-09-24 build review):
+    the new claim, a claim already in the topic file, or both -- by id and line, with the checks.
+    A capture into a file carrying any gating error is refused, so "the claim would not lint"
+    was wrong whenever the gating line was about a different claim."""
+    ids = {(c.file, c.line): c.fields.get("id") for c in claims}
+    new = sorted({e.check for e in gating if e.file == relf and e.line == cand_ln})
+    others = {}
+    for e in gating:
+        if e.file == relf and e.line == cand_ln:
+            continue
+        who = ids.get((e.file, e.line)) or ("the frontmatter" if e.line == 1
+                                            else "the id-less claim")
+        others.setdefault(f"{who} at {e.file}:{e.line}", set()).add(e.check)
+    parts = ([f"the new claim ({', '.join(new)})"] if new else []) + [
+        f"{who} ({', '.join(sorted(checks))})" for who, checks in others.items()]
+    text = "Gating: " + "; ".join(parts) + " -- the gating lines above say why."
+    if others and not new:
+        text += (" That is not the new claim, which has no gating finding of its own: a capture "
+                 f"into a file that does not lint is refused until {rel} is fixed.")
+    return text
 
 
 # ------------------------------------------------------------------------- reconfirm
@@ -558,6 +609,7 @@ def cmd_reconfirm(args, manifest):
 
     for _name, _val in (("--v", args.v), ("--src", args.src), ("--conf", args.conf)):
         reject_control_chars(_name, _val)
+        reject_double_quote(_name, _val)     # OR5: these reach the brace through the same _q
 
     cfg, claims = instance_claims(root)
     c = claims.get(args.claim_id)
