@@ -96,6 +96,17 @@ Computed from each claim's verification method, never stored:
 Retirement is a separate axis: `superseded` and `deprecated` claims are hidden unless you ask for
 `--history`. Never treat a quarantined, superseded or deprecated claim as current truth.
 
+## Upgrading from 0.1.7
+
+Run `kb-lint fix kb/` once after upgrading. Superseding a claim now sets the older claim's
+`status: superseded` whatever status it carried before (a decision's `accepted`, a lifted lesson's
+`promoted`), and a claim that already carries a `superseded-by:` link with an older status is
+reported as **fixable** — that one `fix` run repairs it. Two supersedes are now refused before
+anything is written: onto a `deprecated` claim (write the corrected claim without a link) and onto a
+claim another claim already supersedes (supersede the chain head instead). A `supersedes:` whose
+target lives in another topic file is a normal write: links resolve against the whole knowledge base,
+the check reports only the file you touched, and the fix writes the reciprocal into the other file.
+
 ## Upgrading from 0.1.6
 
 Older versions logged each query to `kb/_serve/` and took `--no-log`. 0.1.7 does neither: a script
@@ -103,10 +114,12 @@ that passes `--no-log` now exits 2, and the `kb/_serve/` directory can be delete
 
 ## Not in this preview
 
-- **No pre-commit hook.** A hook has to find the tools at commit time, and under a plugin install
-  the only path it could record is a versioned cache directory that the next version bump orphans.
-  Adopters therefore have no write-time boundary backstop; the primary guard is the write-time
-  check inside `kb_capture` itself.
+- **No pre-commit hook ships.** A hook has to find the tools at commit time, and under a plugin
+  install the only path it could record is a versioned cache directory that the next version bump
+  orphans. The guard every adopter has is the check `kb_capture` runs before it appends. An instance
+  MAY carry its own machine-local hook (one that reads the interpreter and the tools' directory from
+  its local git config); where one runs, a refusal at commit time is the gate working, the commit may
+  include the fixer's own edits, and the hook is never bypassed with `--no-verify`.
 - **No POSIX support**, and no cross-platform CI.
 
 MIT licensed — see `LICENSE`.

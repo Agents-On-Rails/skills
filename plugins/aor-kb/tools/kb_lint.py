@@ -11,10 +11,13 @@ Subcommands: check (default) / fix / strip / stats.
 """
 
 import argparse
+import atexit
 import random
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 from datetime import date
 from pathlib import Path
 
@@ -474,7 +477,8 @@ def check_claim(c, default_src, errs, cfg):
             if req not in f:
                 errs.append(Err(*where, "L4", "G",
                                 f"{label(c)} decisions are ratified, not verified -- "
-                                "use date: + status: (proposed/accepted)"))
+                                "use date: + status: (proposed/accepted; superseded once "
+                                "replaced)"))
                 break
         if "v" in f:
             errs.append(Err(*where, "L4", "G",
@@ -578,8 +582,35 @@ def check_claim(c, default_src, errs, cfg):
 
 # ---------------------------------------------------------------- corpus checks
 
-def corpus_checks(all_claims, errs, cfg):
-    """L7 referential integrity + L8 id uniqueness, corpus-wide."""
+def chain_head(claim, by_id):
+    """Follow superseded-by: links from `claim` to the claim nothing has replaced yet."""
+    node, seen = claim, set()
+    while node.fields.get("superseded-by") and node.fields.get("id") not in seen:
+        seen.add(node.fields.get("id"))
+        nxt = by_id.get(node.fields["superseded-by"])
+        if nxt is None:
+            break
+        node = nxt
+    return node
+
+
+def corpus_checks(all_claims, errs, cfg, pool=None):
+    """L7 referential integrity + L8 id uniqueness, corpus-wide.
+
+    `all_claims` is the REPORT set: the claims of the files the caller named or staged --
+    every error is about one of them. `pool` is the RESOLUTION set: every other claim in
+    the corpus, which links may point at and ids may collide with, but which is never
+    reported here (issue 73, ruling R3 of 2026-09-24: resolve corpus-wide in every check;
+    keep the gate on the touched/staged set). A link whose target lives in another file is
+    therefore a link, not a dangling id; a link to an id that exists nowhere still gates.
+
+    Supersession (issue 70, rulings R1/R2; issue 74): a claim that carries a back-link but
+    reads any status other than superseded is a FIXABLE finding -- the flip is entailed by
+    the link and `fix` writes it. Two link shapes are GATING on the LINKING claim, raised
+    here so the fixer never writes onto their target: superseding a deprecated claim (a
+    tombstone has no successor) and superseding a claim another claim already supersedes
+    (a single-valued key cannot hold a fork; the message names the chain head).
+    """
     by_id = {}
     flagged = set()   # ids whose FIRST claim has already been reported (A2)
     for c in all_claims:
@@ -611,14 +642,27 @@ def corpus_checks(all_claims, errs, cfg):
                             "be corpus-unique; run `kb-lint fix` to assign fresh ids"))
         else:
             by_id[kid] = c
+    for p in pool or ():
+        kid = p.fields.get("id")
+        if not kid or not cfg["id_format"].match(kid):
+            continue
+        if kid in by_id:
+            c = by_id[kid]
+            if c in all_claims:   # a NAMED claim collides with one in a file not named
+                errs.append(Err(c.file, c.line, "L8", "G",
+                                f"id '{kid}' already used at {p.file}:{p.line} -- ids must "
+                                "be corpus-unique; run `kb-lint fix` to assign fresh ids"))
+            continue              # first-wins among pool claims; their own check reports them
+        by_id[kid] = p
 
     for c in all_claims:
+        cid = c.fields.get("id")
         for key, recip in (("supersedes", "superseded-by"),
                            ("superseded-by", "supersedes")):
             tgt = c.fields.get(key)
             if not tgt:
                 continue
-            if tgt == c.fields.get("id"):
+            if tgt == cid:
                 errs.append(Err(c.file, c.line, "L7", "G",
                                 f"{label(c)} self-supersession -- a claim cannot "
                                 f"{key.replace('-', ' ')} itself"))
@@ -628,11 +672,43 @@ def corpus_checks(all_claims, errs, cfg):
                 errs.append(Err(c.file, c.line, "L7", "G",
                                 f"{label(c)} {key} target '{tgt}' not found in corpus "
                                 "-- link to an existing claim id (retire, never delete)"))
-            elif c.fields.get("id") and other.fields.get(recip) != c.fields["id"]:
-                errs.append(Err(other.file, other.line, "L7", "F",
-                                f"{label(other)} missing reciprocal {recip}: "
-                                f"{c.fields['id']} -- run `kb-lint fix`",
-                                fix=("reciprocal", other, recip, c.fields["id"])))
+                continue
+            existing = other.fields.get(recip)
+            if cid and existing == cid:
+                continue          # the pair is complete
+            # the two refusals come BEFORE the id guard: a candidate at the write path has
+            # no id yet (it is assigned after the append), and must still be refused here
+            if key == "supersedes" and other.fields.get("status") == "deprecated":
+                errs.append(Err(c.file, c.line, "L7", "G",
+                                f"{label(c)} supersedes '{tgt}', which is deprecated "
+                                "(never-true) -- a tombstone has no successor: write the "
+                                "corrected claim WITHOUT a link, and leave the tombstone"))
+                continue
+            if existing:          # the target already links to a DIFFERENT claim
+                if key == "supersedes":
+                    head = chain_head(other, by_id).fields.get("id", existing)
+                    errs.append(Err(c.file, c.line, "L7", "G",
+                                    f"{label(c)} supersedes '{tgt}', which is already "
+                                    f"superseded by {existing} -- a claim has one successor: "
+                                    f"supersede the chain head {head} instead"))
+                else:
+                    errs.append(Err(c.file, c.line, "L7", "G",
+                                    f"{label(c)} superseded-by '{tgt}', but {tgt} supersedes "
+                                    f"{existing} -- a claim supersedes one claim: correct "
+                                    "the link on one side"))
+                continue
+            if not cid:
+                continue          # its own id is assigned first; the reciprocal follows
+            errs.append(Err(other.file, other.line, "L7", "F",
+                            f"{label(other)} missing reciprocal {recip}: {cid} -- run "
+                            "`kb-lint fix`", fix=("reciprocal", other, recip, cid)))
+        sb = c.fields.get("superseded-by")
+        st = c.fields.get("status")
+        if sb and st not in ("superseded", "deprecated"):
+            errs.append(Err(c.file, c.line, "L7", "F",
+                            f"{label(c)} carries superseded-by: {sb} but reads status: "
+                            f"{st or 'active'} -- superseded is entailed by the link; run "
+                            "`kb-lint fix`", fix=("status", c)))
         tgt = c.fields.get("promoted-to")
         if tgt and cfg["id_format"].match(tgt) and tgt not in by_id:
             errs.append(Err(c.file, c.line, "L7", "G",
@@ -751,10 +827,41 @@ def run_git(cwd, *args):
     return r.returncode, r.stdout
 
 
-def run_checks(cfg, files, overrides=None):
+def default_pool(cfg, files):
+    """The resolution pool a check uses unless told otherwise: every corpus file the caller
+    did not name, read from disk (ruling R3: resolve corpus-wide in every check)."""
+    named = {Path(f).resolve() for f in files}
+    return [(f, None) for f in collect_files(cfg, []) if f.resolve() not in named]
+
+
+def index_pool(cfg, files):
+    """The hook's resolution pool: every corpus file NOT staged, read from the INDEX (HEAD
+    plus staged changes), never from the working tree -- a working-tree read would accept a
+    commit whose back-link points at a claim that exists only in an untracked file (R3).
+    Materialised once with `git checkout-index` into a scratch tree removed at exit."""
+    tmp = Path(tempfile.mkdtemp(prefix="kb-lint-index-"))
+    atexit.register(shutil.rmtree, tmp, True)
+    rc, _ = run_git(cfg["dir"], "checkout-index", "-a", "--prefix=" + tmp.as_posix() + "/")
+    if rc != 0:
+        die(f"REFUSING -- `git checkout-index` exited {rc} in {cfg['dir']}: the hook cannot "
+            "resolve links against the index. Re-run once git is healthy.")
+    named = {Path(f).resolve() for f in files}
+    kb_tmp = tmp / cfg["kb_path"]
+    pool = []
+    for f in sorted(kb_tmp.rglob("*.md")) if kb_tmp.is_dir() else []:
+        real = cfg["dir"] / f.relative_to(tmp)
+        if real.resolve() in named:
+            continue
+        pool.append((real, f.read_text(encoding="utf-8")))
+    return pool
+
+
+def run_checks(cfg, files, overrides=None, resolve=None):
     """Full check pass. `overrides` maps Path -> content: those files are linted from the
     given text instead of disk (in-memory candidates, kb_capture --dry-run); resolved-path
-    matching, so caller path spelling never misses."""
+    matching, so caller path spelling never misses. `resolve` is the resolution pool as
+    [(path, text-or-None)]; None means the rest of the corpus from disk (default_pool), and
+    an empty list means nothing beyond `files`."""
     ov = {Path(k).resolve(): v for k, v in overrides.items()} if overrides else {}
     all_errs, all_claims, nfiles = [], [], 0
     for f in files:
@@ -764,7 +871,17 @@ def run_checks(cfg, files, overrides=None):
         all_errs.extend(errs)
         if meta["class"] == "claim":
             all_claims.extend([c for c in claims if c.kind_valid])
-    corpus_checks(all_claims, all_errs, cfg)
+    pool = []
+    for p, text in (default_pool(cfg, files) if resolve is None else resolve):
+        if text is None and ov:
+            text = ov.get(Path(p).resolve())
+        try:
+            claims, _errs, meta = check_file(p, cfg, text=text)
+        except SystemExit:
+            continue   # a pool file outside the config root resolves nothing; not ours to report
+        if meta["class"] == "claim":
+            pool.extend([c for c in claims if c.kind_valid])
+    corpus_checks(all_claims, all_errs, cfg, pool=pool)
     return all_errs, all_claims, nfiles
 
 
@@ -847,8 +964,11 @@ def corpus_ids(cfg):
     write time and costs a claim at read time (see the L8 note in corpus_checks).
 
     A text scan, not a parse: this needs ids, not claims, and it must not surface
-    errors from files the caller did not ask about. Fix scope and gate scope stay on
-    the touched/staged set -- widening those would be the regression Track 1.5 warns of.
+    errors from files the caller did not ask about. The GATE stays on the touched/staged
+    set; link RESOLUTION is corpus-wide (run_checks' pool), and the FIX follows a link into
+    the file its target lives in -- ruling R3 of 2026-09-24 (issue 73), which replaced the
+    earlier "keep FIX on the touched set" intent after a trace showed it leaves every
+    cross-file supersede half-linked, the old claim quarantined and never labelled.
     """
     ids = set()
     for f in collect_files(cfg, []):
@@ -862,39 +982,93 @@ def corpus_ids(cfg):
     return ids
 
 
-def apply_fixes(cfg, files, do_format=False, quiet=False):
-    """Assign missing ids, then (re-parsed) write missing reciprocal links."""
+def apply_fixes(cfg, files, do_format=False, quiet=False, resolve=None, announce=False):
+    """Assign missing ids, then (re-parsed) write missing reciprocal links and the status
+    flips they entail -- into whichever file the linked claim lives in (R3: the fix follows
+    the link). Prints `wrote: <relpath>` for every file it changed, unless quiet; always
+    under `announce` (the hook passes it, so it can stage exactly those files -- R8)."""
     # pass 1: ids
-    errs, claims, _ = run_checks(cfg, files)
+    errs, claims, _ = run_checks(cfg, files, resolve=resolve)
     taken = {c.fields["id"] for c in claims if c.fields.get("id")} | corpus_ids(cfg)
     edits = {}  # relpath -> [(lineno, edit_fn)]
     for e in errs:
         if e.fix and e.fix[0] == "id":
             c = e.fix[1]
             edits.setdefault(c.file, []).append(_id_edit(c, new_id(cfg, taken)))
-    _write_edits(cfg, edits)
-    # pass 2: reciprocals (ids may be fresh)
-    errs, claims, _ = run_checks(cfg, files)
-    edits = {}
+    wrote = set(_write_edits(cfg, edits))
+    # pass 2: reciprocals and status flips (ids may be fresh); claim-level, re-parsed at
+    # write time so an edit into a file outside `files` lands on that file's live lines
+    errs, claims, _ = run_checks(cfg, files, resolve=resolve)
+    claim_edits = {}  # relpath -> {claim id -> {"append": [pairs], "status": value|None}}
     for e in errs:
-        if e.fix and e.fix[0] == "reciprocal":
+        if not e.fix:
+            continue
+        if e.fix[0] == "reciprocal":
             _, c, recip, val = e.fix
-            add = f", {recip}: {val}"
-            if recip == "superseded-by" and "status" not in c.fields:
-                add += ", status: superseded"  # mechanically entailed by the link
-            ln, col = c.brace_close
-            edits.setdefault(c.file, []).append(
-                (ln, lambda line, col=col, add=add: line[:col] + add + line[col:]))
-    _write_edits(cfg, edits)
+            slot = claim_edits.setdefault(c.file, {}).setdefault(c.fields["id"], {"append": [], "status": None})
+            slot["append"].append(f"{recip}: {val}")
+            if recip == "superseded-by":
+                slot["status"] = "superseded"  # mechanically entailed by the link (R1)
+        elif e.fix[0] == "status":
+            c = e.fix[1]
+            slot = claim_edits.setdefault(c.file, {}).setdefault(c.fields["id"], {"append": [], "status": None})
+            slot["status"] = "superseded"
+    wrote |= set(_apply_claim_edits(cfg, claim_edits))
     if do_format:
         n = format_pass(cfg, files)
         if not quiet:
             print(f"format: {n} brace(s) reflowed to the indented-brace form "
                   f"(width {FORMAT_WIDTH})")
-    errs, claims, nfiles = run_checks(cfg, files)
+    if not quiet or announce:
+        for rel in sorted(wrote):
+            print(f"wrote: {rel}")
+    errs, claims, nfiles = run_checks(cfg, files, resolve=resolve)
     if not quiet:
         print("fix: done; re-check follows")
     return report(errs, claims, nfiles, quiet=quiet)
+
+
+_STATUS_IN_BRACE = re.compile(r"(\bstatus:\s*)([^,}\n]*)")
+
+
+def _apply_claim_edits(cfg, claim_edits):
+    """Apply per-claim edits by re-parsing each file from disk and locating the claim by id,
+    so the coordinates are the file's live ones whether or not it was in the checked set.
+    Appends land at the closing brace; a status is REPLACED in place (never appended
+    twice -- the additive form is how a duplicate key gets written). Returns the relpaths
+    written."""
+    written = []
+    for relpath, per_claim in claim_edits.items():
+        p = cfg["dir"] / relpath
+        claims, _errs, meta = check_file(p, cfg)
+        lines = p.read_text(encoding="utf-8").split("\n")
+        changed = False
+        for c in sorted(claims, key=lambda c: -(c.brace_close[0] if c.brace_close else c.line)):
+            kid = c.fields.get("id")
+            if kid not in per_claim or not c.brace_close:
+                continue
+            ed = per_claim[kid]
+            add = list(ed["append"])
+            status = ed["status"]
+            if status and "status" not in c.fields:
+                add.append(f"status: {status}")
+                status = None
+            if add:
+                ln, col = c.brace_close
+                lines[ln - 1] = lines[ln - 1][:col] + ", " + ", ".join(add) + lines[ln - 1][col:]
+                changed = True
+            if status:
+                lo, hi = c.brace_open[0], c.brace_close[0]
+                for i in range(lo - 1, hi):
+                    new, n = _STATUS_IN_BRACE.subn(lambda m: m.group(1) + status, lines[i], count=1)
+                    if n:
+                        lines[i] = new
+                        changed = True
+                        break
+        if changed:
+            p.write_text("\n".join(lines), encoding="utf-8", newline="\n")
+            written.append(relpath)
+    return written
 
 
 def _id_edit(c, kid):
@@ -906,12 +1080,14 @@ def _id_edit(c, kid):
 
 
 def _write_edits(cfg, edits):
+    """Line-level edits (id assignment). Returns the relpaths written."""
     for relpath, lst in edits.items():
         p = cfg["dir"] / relpath
         lines = p.read_text(encoding="utf-8").split("\n")
         for ln, fn in sorted(lst, key=lambda t: -t[0]):  # bottom-up keeps lines valid
             lines[ln - 1] = fn(lines[ln - 1])
         p.write_text("\n".join(lines), encoding="utf-8", newline="\n")
+    return list(edits)
 
 
 # ---------------------------------------------------------------- strip
@@ -1100,11 +1276,15 @@ def main():
         if not args.quiet:
             print("OK: nothing to lint")
         return 0
+    # the resolution pool: the rest of the corpus, from disk -- or, in hook context, from
+    # the INDEX, so a staged link is judged against what the commit will contain (R3)
+    pool = index_pool(cfg, files) if (args.changed and args.hook) else None
     if args.cmd == "check":
-        errs, claims, nfiles = run_checks(cfg, files)
+        errs, claims, nfiles = run_checks(cfg, files, resolve=pool)
         return report(errs, claims, nfiles, quiet=args.quiet)
     if args.cmd == "fix":
-        return apply_fixes(cfg, files, do_format=args.format, quiet=args.quiet)
+        return apply_fixes(cfg, files, do_format=args.format, quiet=args.quiet,
+                           resolve=pool, announce=args.hook)
     if args.cmd == "strip":
         return do_strip(cfg, files, args.out)
     if args.cmd == "stats":

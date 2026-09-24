@@ -245,7 +245,10 @@ keys are tolerated rather than rejected in v0.1 — tightening to closed per-kin
 `proposed` / `accepted` (decisions — ADR lifecycle) · `superseded` (a truth that aged out,
 with `superseded-by:`) · `deprecated` (never-true, with mandatory `reason:` — kept so
 others know not to re-add) · `promoted` (a lesson lifted to the always-on layer, with
-`promoted-to:`). Retire, never delete: a deleted claim that anything links to breaks L7,
+`promoted-to:`). A claim that carries `superseded-by:` reads `status: superseded`, whatever
+it read before — the transition is entailed by the link and is **fixable** (`promoted-to:`
+stays); a `deprecated` claim and a claim another claim already supersedes are never supersede
+targets (gating, on the linking claim). Retire, never delete: a deleted claim that anything links to breaks L7,
 so silent deletion of any *linked* claim is structurally impossible. Physical deletion is
 reserved for content that should never have existed (secrets — which also triggers key
 rotation).

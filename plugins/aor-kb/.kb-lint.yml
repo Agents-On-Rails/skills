@@ -64,5 +64,8 @@ checks: # G = gating, F = fixable; semantics in `okf-e-profile.md` §4 and §6
   L5: evidence-asymmetry  # G  T1-T3 need src:+conf:; unverified bare; deprecated needs reason:
                           #    FAIL-CLOSED: never default/coerce a missing method
   L6: value-validity      # G  enums, ISO dates not-future, until: > v:-date, seen: >= 1
-  L7: link-integrity      # F/G reciprocal links fixable; dangling target gates
+  L7: link-integrity      # F/G reciprocal links and the status a back-link entails fixable; a
+                          #    target that exists nowhere, is deprecated, or is already superseded
+                          #    by another claim gates (on the linking claim). Targets resolve
+                          #    corpus-wide; the report covers the files named or staged.
   L8: id-unique           # F/G beads-style c-XXXX; missing id assignable; collision gates

@@ -367,6 +367,23 @@ def cmd_verify_boundary(args):
     return 0
 
 
+def preview_lint(cfg, fp, line):
+    """Lint `line` appended in memory to `fp`, against the whole corpus, gated on that file.
+    Shared by --dry-run and by the write (which appends only on a clean verdict). Returns
+    (errs, claims, nfiles, candidate_text); the candidate's own missing id is dropped from
+    errs, since the write's fix assigns it."""
+    cand = render_appended(fp, line, cfg["profile"])
+    # the REPORT set is the one file being written (gated on the touched file, R3); the rest
+    # of the corpus is the resolution pool, so a link into another topic file resolves and a
+    # pre-existing error elsewhere never refuses this write
+    errs, claims, nfiles = kb_lint.run_checks(cfg, [fp], overrides={fp: cand})
+    relf = fp.resolve().relative_to(Path(cfg["dir"]).resolve()).as_posix()
+    cand_ln = cand.rstrip("\n").count("\n") + 1
+    errs = [e for e in errs
+            if not (e.fix and e.fix[0] == "id" and e.file == relf and e.line == cand_ln)]
+    return errs, claims, nfiles, cand
+
+
 def cmd_add(args, manifest):
     root, entry = kb_boundary.resolve_instance_guarded(
         args.instance, manifest, confirm_personal=args.confirm_personal)
@@ -396,46 +413,41 @@ def cmd_add(args, manifest):
         die("assembled claim line is not a single line -- refusing to write, since one capture "
             "appends exactly one claim (SEC-PC-006)")
 
+    # T8/G4: lint the candidate appended IN-MEMORY to the REAL target file (inheriting its
+    # defaults:{src}), against the REAL corpus (L7 supersession targets + L8 id uniqueness
+    # resolve). A stub/throwaway context would false-fail inherited-src facts and false-pass
+    # id collisions -- the exact dry-run != write divergence T8 is about. Nothing is written
+    # by the preview: no file under kb_path, no index refresh, no HEAD move.
+    # SCOPE (issue 73, ruling R3/R4 of 2026-09-24): the preview and the write judge the SAME
+    # thing -- the candidate against the whole corpus, gated on this file. The write runs
+    # this preview FIRST and appends only on a clean verdict (R4: a refusal refuses, it does
+    # not write and then report). The write-time fix that follows the append resolves links
+    # corpus-wide too and follows a link into the file its target lives in (kb_lint.apply_fixes),
+    # so a supersede across topic files is a normal write, not a sticky error. An earlier
+    # comment here recorded the opposite intent ("keep FIX and GATE on the touched set");
+    # the 2026-09-23 panel traced that shape to a half-linked corpus and it was ruled out.
+    errs, claims, nfiles, _cand = preview_lint(cfg, fp, line)
     if args.dry_run:
-        # T8/G4: lint the candidate appended IN-MEMORY to the REAL target file (inheriting
-        # its defaults:{src}), against the REAL corpus (L7 supersession targets + L8 id
-        # uniqueness resolve). A stub/throwaway context would false-fail inherited-src facts
-        # and false-pass id collisions -- the exact dry-run != write divergence T8 is about.
-        # Nothing is written: no file under kb_path, no index refresh, no HEAD move.
-        # SCOPE (panel #2 arch#1): this preview is CORPUS-scoped and equals the write verdict
-        # for L1-L6 + same-file L7/L8. CROSS-file L7/L8 diverge from today's [fp]-scoped
-        # write lint (apply_fixes) and staged-scoped hook -- both directions fail closed;
-        # a later track resolves this corpus-wide (logged outside this payload):
-        # resolve corpus-wide, but keep FIX and GATE on the
-        # touched/staged set -- widening all three is a regression. NOT to narrow this
-        # preview down to the write path's blind spot.
         created = "new file" if not fp.is_file() else "append"
         print(f"[dry-run] {args.instance} -> {fp} ({created})")
         print(f"  {line}")
-        cand = render_appended(fp, line, cfg["profile"])
-        files = kb_lint.collect_files(cfg, [])
-        if not any(f.resolve() == fp.resolve() for f in files):
-            files.append(fp)  # new-topic candidate: not on disk, linted from memory
-        errs, claims, nfiles = kb_lint.run_checks(cfg, files, overrides={fp: cand})
-        # The candidate's own missing id is EXPECTED (the write path's fix assigns it) --
-        # drop exactly that one F-entry so a green preview isn't reported as fixable-dirty.
-        # Everything else (any file, any class) reports verbatim.
-        relf = fp.resolve().relative_to(Path(cfg["dir"]).resolve()).as_posix()
-        cand_ln = cand.rstrip("\n").count("\n") + 1
-        errs = [e for e in errs
-                if not (e.fix and e.fix[0] == "id" and e.file == relf and e.line == cand_ln)]
         rc = kb_lint.report(errs, claims, nfiles, quiet=args.quiet)
         if not args.quiet:
             print("[dry-run] candidate lints GREEN in the real corpus (id assigned at write)"
                   if rc == 0 else
-                  "[dry-run] candidate FAILS the real lint -- the write/commit would be "
-                  "rejected the same way")
+                  "[dry-run] candidate FAILS the real lint -- the write would be REFUSED the "
+                  "same way, writing nothing")
         return rc
+    if any(e.cls == "G" for e in errs):
+        kb_lint.report(errs, claims, nfiles, quiet=False)
+        print(f"REFUSED -- the claim would not lint (the gating line above says why); "
+              f"NOTHING was written to {fp.relative_to(root).as_posix()}", file=sys.stderr)
+        return 1
 
     created = append_claim(fp, line, cfg["profile"])
     print(f"wrote {'new ' if created else ''}{fp.relative_to(root).as_posix()} "
           f"(instance '{args.instance}', boundary OK)")
-    # id assignment + lint on the touched file (reuse kb_lint's fix+check machinery)
+    # id assignment + lint on the touched file; the fix follows a link into another file
     rc = kb_lint.apply_fixes(cfg, [fp], do_format=True, quiet=args.quiet)
     # P4 (a2): keep the infuse artifact (<kb_path>/index.md) current after every capture. Lives in
     # kb_lint so it reuses the linter's reserved-file set + claim predicate (ARCH-004).
