@@ -606,10 +606,17 @@ def corpus_checks(all_claims, errs, cfg, pool=None):
 
     Supersession (issue 70, rulings R1/R2; issue 74): a claim that carries a back-link but
     reads any status other than superseded is a FIXABLE finding -- the flip is entailed by
-    the link and `fix` writes it. Two link shapes are GATING on the LINKING claim, raised
-    here so the fixer never writes onto their target: superseding a deprecated claim (a
-    tombstone has no successor) and superseding a claim another claim already supersedes
-    (a single-valued key cannot hold a fork; the message names the chain head).
+    the link and `fix` writes it, unless that back-link is itself refused, dangling or
+    self-referential (then nothing is flipped). The link shapes below are GATING on the
+    LINKING claim, raised here so the fixer never writes onto their target:
+      - superseding a deprecated claim, whether or not the pair is complete (a tombstone has
+        no successor); likewise a deprecated claim that carries superseded-by: itself, since
+        completing that pair would write exactly the refused link;
+      - superseding a claim another claim already supersedes: with a back-link the message
+        names the chain head; with none, every claim linking to that target gates (S1), and
+        so does the mirror, two claims naming one successor that links back to neither
+        (a single-valued key cannot hold a fork). The second link is looked for in the pool
+        as well as the report set, so a fork is seen whichever file its other end lives in.
     """
     by_id = {}
     flagged = set()   # ids whose FIRST claim has already been reported (A2)
@@ -655,35 +662,57 @@ def corpus_checks(all_claims, errs, cfg, pool=None):
             continue              # first-wins among pool claims; their own check reports them
         by_id[kid] = p
 
+    # Who links to each target, over the report set AND the pool: a fork onto a target that
+    # carries no back-link is visible only here, and its second link may live in a file the
+    # caller did not name (A3, S1 of the 2026-09-24 build review).
+    linkers = {}
+    for c in list(all_claims) + list(pool or ()):
+        for key in ("supersedes", "superseded-by"):
+            if c.fields.get(key):
+                linkers.setdefault((key, c.fields[key]), []).append(c)
+
     for c in all_claims:
         cid = c.fields.get("id")
+        sb_refused = False    # the claim's own superseded-by: is refused, dangling or self (A4)
         for key, recip in (("supersedes", "superseded-by"),
                            ("superseded-by", "supersedes")):
             tgt = c.fields.get(key)
             if not tgt:
                 continue
+            refuse = key == "superseded-by"
             if tgt == cid:
                 errs.append(Err(c.file, c.line, "L7", "G",
                                 f"{label(c)} self-supersession -- a claim cannot "
                                 f"{key.replace('-', ' ')} itself"))
+                sb_refused |= refuse
                 continue
             other = by_id.get(tgt)
             if other is None:
                 errs.append(Err(c.file, c.line, "L7", "G",
                                 f"{label(c)} {key} target '{tgt}' not found in corpus "
                                 "-- link to an existing claim id (retire, never delete)"))
+                sb_refused |= refuse
                 continue
             existing = other.fields.get(recip)
-            if cid and existing == cid:
-                continue          # the pair is complete
-            # the two refusals come BEFORE the id guard: a candidate at the write path has
-            # no id yet (it is assigned after the append), and must still be refused here
+            # The refusals come BEFORE the id guard: a candidate at the write path has no id
+            # yet (it is assigned after the append), and must still be refused here. The two
+            # tombstone refusals come before the pair-complete check too, so a complete legacy
+            # pair onto a deprecated claim is refused like a new link (A10).
             if key == "supersedes" and other.fields.get("status") == "deprecated":
                 errs.append(Err(c.file, c.line, "L7", "G",
                                 f"{label(c)} supersedes '{tgt}', which is deprecated "
                                 "(never-true) -- a tombstone has no successor: write the "
                                 "corrected claim WITHOUT a link, and leave the tombstone"))
                 continue
+            if key == "superseded-by" and c.fields.get("status") == "deprecated":
+                errs.append(Err(c.file, c.line, "L7", "G",
+                                f"{label(c)} is deprecated but carries superseded-by: {tgt} -- a "
+                                "tombstone has no successor: remove superseded-by: here (and any "
+                                f"supersedes: {cid or 'link'} on {tgt}); the tombstone stays"))
+                sb_refused = True
+                continue
+            if cid and existing == cid:
+                continue          # the pair is complete
             if existing:          # the target already links to a DIFFERENT claim
                 if key == "supersedes":
                     head = chain_head(other, by_id).fields.get("id", existing)
@@ -696,6 +725,24 @@ def corpus_checks(all_claims, errs, cfg, pool=None):
                                     f"{label(c)} superseded-by '{tgt}', but {tgt} supersedes "
                                     f"{existing} -- a claim supersedes one claim: correct "
                                     "the link on one side"))
+                sb_refused |= refuse
+                continue
+            others = [o for o in linkers.get((key, tgt), ()) if o is not c]
+            if others:            # a fork onto a target that links back to none of them (S1)
+                names = ", ".join(o.fields.get("id") or f"the id-less claim at {o.file}:{o.line}"
+                                  for o in others)
+                if key == "supersedes":
+                    errs.append(Err(c.file, c.line, "L7", "G",
+                                    f"{label(c)} supersedes '{tgt}', and so does {names} -- a "
+                                    f"claim has one successor and {tgt} links back to none of "
+                                    "them: keep one link, and make the other supersede the "
+                                    "claim that replaced it"))
+                else:
+                    errs.append(Err(c.file, c.line, "L7", "G",
+                                    f"{label(c)} superseded-by '{tgt}', and so is {names} -- a "
+                                    f"claim supersedes one claim and {tgt} links back to none of "
+                                    "them: correct the link on one side"))
+                sb_refused |= refuse
                 continue
             if not cid:
                 continue          # its own id is assigned first; the reciprocal follows
@@ -704,7 +751,7 @@ def corpus_checks(all_claims, errs, cfg, pool=None):
                             "`kb-lint fix`", fix=("reciprocal", other, recip, cid)))
         sb = c.fields.get("superseded-by")
         st = c.fields.get("status")
-        if sb and st not in ("superseded", "deprecated"):
+        if sb and st not in ("superseded", "deprecated") and not sb_refused:
             errs.append(Err(c.file, c.line, "L7", "F",
                             f"{label(c)} carries superseded-by: {sb} but reads status: "
                             f"{st or 'active'} -- superseded is entailed by the link; run "
@@ -885,6 +932,11 @@ def run_checks(cfg, files, overrides=None, resolve=None):
     return all_errs, all_claims, nfiles
 
 
+# What each fixable kind is called in the summary. A stale status is present and wrong, not
+# missing (C19 of the 2026-09-24 build review).
+FIX_NAMES = {"id": "missing id", "reciprocal": "missing reciprocal", "status": "stale status"}
+
+
 def report(errs, claims, nfiles, quiet=False):
     g = sum(1 for e in errs if e.cls == "G")
     fx = [e for e in errs if e.cls == "F"]
@@ -904,7 +956,7 @@ def report(errs, claims, nfiles, quiet=False):
             for e in fx:
                 kinds[e.fix[0]] = kinds.get(e.fix[0], 0) + 1
             detail = " (run `kb-lint fix`: " + ", ".join(
-                f"{n} missing {k}" for k, n in sorted(kinds.items())) + ")"
+                f"{n} {FIX_NAMES.get(k, 'missing ' + k)}" for k, n in sorted(kinds.items())) + ")"
         print(f"FAIL: {g} gating errors - {len(fx)} fixable{detail}")
     elif not quiet:
         print(f"OK: {nfiles} files - {len(claims)} claims - 0 errors")
@@ -982,11 +1034,37 @@ def corpus_ids(cfg):
     return ids
 
 
+class FixRun:
+    """What one fix run wrote, and whether it may write. Every write goes through write(),
+    so `wrote` holds exactly the files whose bytes this run changed, and `refused` the claims
+    the editor would not touch because their live brace already carries the key with another
+    value (A1 of the 2026-09-24 build review)."""
+
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.wrote, self.refused = set(), []
+
+    def write(self, relpath, text):
+        p = self.cfg["dir"] / relpath
+        old = p.read_text(encoding="utf-8") if p.is_file() else None
+        if old == text:
+            return False
+        p.write_text(text, encoding="utf-8", newline="\n")
+        self.wrote.add(relpath)
+        return True
+
+    def refuse(self, relpath, claim, why):
+        self.refused.append(relpath)
+        print(f"kb-lint: REFUSED -- {relpath}:{claim.line} {claim.fields.get('id')}: {why}. "
+              "Nothing was written onto this claim.", file=sys.stderr)
+
+
 def apply_fixes(cfg, files, do_format=False, quiet=False, resolve=None, announce=False):
     """Assign missing ids, then (re-parsed) write missing reciprocal links and the status
     flips they entail -- into whichever file the linked claim lives in (R3: the fix follows
     the link). Prints `wrote: <relpath>` for every file it changed, unless quiet; always
     under `announce` (the hook passes it, so it can stage exactly those files -- R8)."""
+    run = FixRun(cfg)
     # pass 1: ids
     errs, claims, _ = run_checks(cfg, files, resolve=resolve)
     taken = {c.fields["id"] for c in claims if c.fields.get("id")} | corpus_ids(cfg)
@@ -995,7 +1073,8 @@ def apply_fixes(cfg, files, do_format=False, quiet=False, resolve=None, announce
         if e.fix and e.fix[0] == "id":
             c = e.fix[1]
             edits.setdefault(c.file, []).append(_id_edit(c, new_id(cfg, taken)))
-    wrote = set(_write_edits(cfg, edits))
+    _write_edits(cfg, edits, run)
+    wrote = run.wrote
     # pass 2: reciprocals and status flips (ids may be fresh); claim-level, re-parsed at
     # write time so an edit into a file outside `files` lands on that file's live lines
     errs, claims, _ = run_checks(cfg, files, resolve=resolve)
@@ -1013,7 +1092,7 @@ def apply_fixes(cfg, files, do_format=False, quiet=False, resolve=None, announce
             c = e.fix[1]
             slot = claim_edits.setdefault(c.file, {}).setdefault(c.fields["id"], {"append": [], "status": None})
             slot["status"] = "superseded"
-    wrote |= set(_apply_claim_edits(cfg, claim_edits))
+    _apply_claim_edits(cfg, claim_edits, run)
     if do_format:
         n = format_pass(cfg, files)
         if not quiet:
@@ -1025,50 +1104,99 @@ def apply_fixes(cfg, files, do_format=False, quiet=False, resolve=None, announce
     errs, claims, nfiles = run_checks(cfg, files, resolve=resolve)
     if not quiet:
         print("fix: done; re-check follows")
-    return report(errs, claims, nfiles, quiet=quiet)
+    rc = report(errs, claims, nfiles, quiet=quiet)
+    return 1 if run.refused else rc
 
 
-_STATUS_IN_BRACE = re.compile(r"(\bstatus:\s*)([^,}\n]*)")
+def _brace_field_span(c, key):
+    """Where `key`'s value sits in the claim's metadata brace, as (lineno, lo, hi) raw columns
+    on ONE physical line, or None when the key is absent or its value spans a line break.
+
+    The edit is brace-scoped and key-anchored (A2 of the 2026-09-24 build review; ruling R2
+    named kb_capture.apply_to_brace's shape): the brace is the one the parser itself found
+    (find_meta_brace over the joined item text), and the key is matched only at the START of a
+    pair, walking the pairs quote-aware the way split_pairs does. `status:` in the claim's
+    prose, or inside a quoted value such as `why: "the status: quo"`, can never match -- the
+    line-wide regex this replaces rewrote both, and could delete the brace's `{id: ...`."""
+    joined, posmap = scan_brace(c.text_lines)
+    meta = find_meta_brace(joined)
+    if meta is None:
+        return None
+    lo_seq, hi_seq = meta
+    start, in_q = lo_seq + 1, False
+    for i in range(lo_seq + 1, hi_seq + 1):
+        ch = joined[i]
+        if i < hi_seq and ch == '"':
+            in_q = not in_q
+        if i == hi_seq or (ch == "," and not in_q):
+            seg = joined[start:i]
+            m = re.match(r"\s*" + re.escape(key) + r":\s*", seg)
+            if m:
+                vs, ve = start + m.end(), start + len(seg.rstrip())
+                if ve <= vs:
+                    return None
+                (l1, c1), (l2, c2) = posmap[vs], posmap[ve - 1]
+                return (l1, c1, c2 + 1) if l1 == l2 else None
+            start = i + 1
+    return None
 
 
-def _apply_claim_edits(cfg, claim_edits):
+def _edit_claim(run, relpath, c, lines, ed):
+    """One claim's appends and status flip, judged against its LIVE brace (A1): a value the
+    brace already holds is a no-op, never a second key; another value for a key it holds is
+    refused, and then nothing is written onto the claim. A status is REPLACED in place through
+    _brace_field_span (A2), or appended when the claim has none."""
+    add, pending = [], {}
+    for pair in ed["append"]:
+        key, val = pair.split(": ", 1)
+        have = c.fields.get(key, pending.get(key))
+        if have == val:
+            continue
+        if have is not None:
+            run.refuse(relpath, c, f"it already carries {key}: {have}, and the fix would add "
+                                   f"{key}: {val} beside it -- a single-valued key cannot hold both")
+            return
+        pending[key] = val
+        add.append(pair)
+    status, have = ed["status"], c.fields.get("status")
+    if status and have == "deprecated":
+        run.refuse(relpath, c, f"it is deprecated, and the fix would set status: {status} -- "
+                               "a tombstone is never flipped")
+        return
+    span = None
+    if status and have not in (None, status):
+        span = _brace_field_span(c, "status")
+        if span is None:
+            run.refuse(relpath, c, "its status: value could not be located on one line of its "
+                                   "brace, so it cannot be replaced safely")
+            return
+    elif status and have is None:
+        add.append(f"status: {status}")
+    if add:   # at the closing brace, which lies after every value on its line
+        ln, col = c.brace_close
+        lines[ln - 1] = lines[ln - 1][:col] + ", " + ", ".join(add) + lines[ln - 1][col:]
+    if span:
+        ln, lo, hi = span
+        lines[ln - 1] = lines[ln - 1][:lo] + status + lines[ln - 1][hi:]
+
+
+def _apply_claim_edits(cfg, claim_edits, run=None):
     """Apply per-claim edits by re-parsing each file from disk and locating the claim by id,
     so the coordinates are the file's live ones whether or not it was in the checked set.
     Appends land at the closing brace; a status is REPLACED in place (never appended
     twice -- the additive form is how a duplicate key gets written). Returns the relpaths
     written."""
-    written = []
+    run = run or FixRun(cfg)
     for relpath, per_claim in claim_edits.items():
         p = cfg["dir"] / relpath
-        claims, _errs, meta = check_file(p, cfg)
+        claims, _errs, _meta = check_file(p, cfg)
         lines = p.read_text(encoding="utf-8").split("\n")
-        changed = False
         for c in sorted(claims, key=lambda c: -(c.brace_close[0] if c.brace_close else c.line)):
             kid = c.fields.get("id")
-            if kid not in per_claim or not c.brace_close:
-                continue
-            ed = per_claim[kid]
-            add = list(ed["append"])
-            status = ed["status"]
-            if status and "status" not in c.fields:
-                add.append(f"status: {status}")
-                status = None
-            if add:
-                ln, col = c.brace_close
-                lines[ln - 1] = lines[ln - 1][:col] + ", " + ", ".join(add) + lines[ln - 1][col:]
-                changed = True
-            if status:
-                lo, hi = c.brace_open[0], c.brace_close[0]
-                for i in range(lo - 1, hi):
-                    new, n = _STATUS_IN_BRACE.subn(lambda m: m.group(1) + status, lines[i], count=1)
-                    if n:
-                        lines[i] = new
-                        changed = True
-                        break
-        if changed:
-            p.write_text("\n".join(lines), encoding="utf-8", newline="\n")
-            written.append(relpath)
-    return written
+            if kid in per_claim and c.brace_close:
+                _edit_claim(run, relpath, c, lines, per_claim[kid])
+        run.write(relpath, "\n".join(lines))
+    return sorted(run.wrote)
 
 
 def _id_edit(c, kid):
@@ -1079,15 +1207,16 @@ def _id_edit(c, kid):
     return (ln, lambda line: line.rstrip() + f" {{id: {kid}}}")
 
 
-def _write_edits(cfg, edits):
+def _write_edits(cfg, edits, run=None):
     """Line-level edits (id assignment). Returns the relpaths written."""
+    run = run or FixRun(cfg)
     for relpath, lst in edits.items():
         p = cfg["dir"] / relpath
         lines = p.read_text(encoding="utf-8").split("\n")
         for ln, fn in sorted(lst, key=lambda t: -t[0]):  # bottom-up keeps lines valid
             lines[ln - 1] = fn(lines[ln - 1])
-        p.write_text("\n".join(lines), encoding="utf-8", newline="\n")
-    return list(edits)
+        run.write(relpath, "\n".join(lines))
+    return sorted(run.wrote)
 
 
 # ---------------------------------------------------------------- strip
