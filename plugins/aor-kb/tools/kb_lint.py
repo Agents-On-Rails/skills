@@ -784,7 +784,7 @@ def corpus_checks(all_claims, errs, cfg, pool=None):
 
 def collect_files(cfg, paths, changed=False, hook=False):
     if changed:
-        rc, out = run_git(cfg["dir"], "diff", "--cached", "--name-only",
+        rc, out = run_git(cfg["dir"], "diff", "--cached", "--name-only", "-z",
                           "--diff-filter=ACMR")
         if rc != 0:
             # REPORT, do not halt (#50). An empty list here means "lint nothing", which
@@ -807,9 +807,12 @@ def collect_files(cfg, paths, changed=False, hook=False):
                   "the staged-file list is empty because git could not be read, NOT "
                   "because nothing is staged. Anything below covers zero files.",
                   file=sys.stderr)
-        files = [cfg["dir"] / f for f in out.splitlines()
+        files = [cfg["dir"] / f for f in out.split("\0")
                  if f.startswith(cfg["kb_path"] + "/") and f.endswith(".md")]
-        return _dedupe([f for f in files if f.is_file()])
+        # In hook context a staged file is linted from the index whether or not the working
+        # tree still holds it -- the commit carries it either way (A7 of the 2026-09-24 build
+        # review). Interactively, a staged file deleted from disk is skipped, as before.
+        return _dedupe(files if hook else [f for f in files if f.is_file()])
     if not paths:
         paths = [cfg["dir"] / cfg["kb_path"]]
     files = []
@@ -890,26 +893,80 @@ def default_pool(cfg, files):
     return [(f, None) for f in corpus_files(cfg) if f.resolve() not in named]
 
 
-def index_pool(cfg, files):
-    """The hook's resolution pool: every corpus file NOT staged, read from the INDEX (HEAD
-    plus staged changes), never from the working tree -- a working-tree read would accept a
-    commit whose back-link points at a claim that exists only in an untracked file (R3).
-    Materialised once with `git checkout-index` into a scratch tree removed at exit."""
-    tmp = Path(tempfile.mkdtemp(prefix="kb-lint-index-"))
-    atexit.register(shutil.rmtree, tmp, True)
-    rc, _ = run_git(cfg["dir"], "checkout-index", "-a", "--prefix=" + tmp.as_posix() + "/")
-    if rc != 0:
-        die(f"REFUSING -- `git checkout-index` exited {rc} in {cfg['dir']}: the hook cannot "
-            "resolve links against the index. Re-run once git is healthy.")
-    named = {Path(f).resolve() for f in files}
-    kb_tmp = tmp / cfg["kb_path"]
-    pool = []
-    for f in sorted(kb_tmp.rglob("*.md")) if kb_tmp.is_dir() else []:
-        real = cfg["dir"] / f.relative_to(tmp)
-        if real.resolve() in named:
-            continue
-        pool.append((real, f.read_text(encoding="utf-8")))
-    return pool
+class DiskView:
+    """The corpus as the working tree holds it: every read from disk, every file writable.
+    What `check`, `fix` and kb_capture use outside hook context."""
+
+    def overrides_for(self, files):
+        return None
+
+    def pool_for(self, files):
+        return None       # run_checks' default_pool: the rest of the corpus, from disk
+
+    def writable(self, relpath):
+        return True
+
+
+class IndexView:
+    """The corpus as the commit will carry it (ruling R3: in hook context the corpus is the
+    index -- HEAD plus staged changes), for `check --changed --hook` and `fix --changed --hook`.
+
+    Every corpus file in the index is materialised once with `git checkout-index` into a
+    scratch tree removed at exit. A file whose working-tree copy git reports as differing from
+    its staged copy (`git diff --name-only`, which applies git's own line-ending filters, so a
+    tool's LF write is not mistaken for a change) is read from that staged copy; any other
+    indexed file is read from disk, which then holds the same content. Staged files included
+    (A7 of the 2026-09-24 build review): they were read from the working tree, so a commit was
+    judged on content it does not carry. A file that is not in the index is not in this corpus.
+
+    The write rule (operator ruling OR4): the fixer may write a file only when its working-tree
+    copy matches its staged copy -- the only case in which an edit computed from what the
+    commit carries lands on the same content. A file with unstaged edits, a file deleted from
+    the working tree, and a file with no staged copy at all (not in the index) are never
+    written; the fix run then fails naming the file. That last case cannot arise from the
+    corpus itself -- every link resolves into the index -- so it is the fail-closed answer to a
+    state nothing should produce."""
+
+    def __init__(self, cfg, staged):
+        tmp = Path(tempfile.mkdtemp(prefix="kb-lint-index-"))
+        atexit.register(shutil.rmtree, tmp, True)
+        rc, _ = run_git(cfg["dir"], "checkout-index", "-a", "--prefix=" + tmp.as_posix() + "/")
+        if rc != 0:
+            die(f"REFUSING -- `git checkout-index` exited {rc} in {cfg['dir']}: the hook cannot "
+                "resolve links against the index. Re-run once git is healthy.")
+        rc, out = run_git(cfg["dir"], "--no-optional-locks", "diff", "--name-only", "-z",
+                          "--no-renames", "--", cfg["kb_path"] + "/")
+        if rc != 0:
+            die(f"REFUSING -- `git diff` exited {rc} in {cfg['dir']}: the hook cannot tell which "
+                "files carry unstaged edits, so it cannot judge the commit. Re-run once git is "
+                "healthy.")
+        self.cfg = cfg
+        self.dirty = {f for f in out.split("\0") if f}
+        kb_tmp = tmp / cfg["kb_path"]
+        self.indexed = {f.relative_to(tmp).as_posix(): f.read_text(encoding="utf-8")
+                        for f in (sorted(kb_tmp.rglob("*.md")) if kb_tmp.is_dir() else [])}
+
+    def _rel(self, f):
+        return Path(f).resolve().relative_to(Path(self.cfg["dir"]).resolve()).as_posix()
+
+    def _text(self, rel):
+        return self.indexed[rel] if rel in self.dirty else None
+
+    def overrides_for(self, files):
+        out = {}
+        for f in files:
+            rel = self._rel(f)
+            if rel in self.indexed and self._text(rel) is not None:
+                out[Path(f)] = self._text(rel)
+        return out
+
+    def pool_for(self, files):
+        named = {self._rel(f) for f in files}
+        return [(self.cfg["dir"] / rel, self._text(rel))
+                for rel in sorted(self.indexed) if rel not in named]
+
+    def writable(self, relpath):
+        return relpath in self.indexed and relpath not in self.dirty
 
 
 def run_checks(cfg, files, overrides=None, resolve=None):
@@ -985,14 +1042,17 @@ def new_id(cfg, taken):
 FORMAT_WIDTH = 100
 
 
-def format_pass(cfg, files, run=None):
+def format_pass(cfg, files, run=None, view=None):
     """F4 normalizer (P2): move an overlong INLINE brace to its own indented
     line (the grammar's continuation form). Multi-line braces are already in
     continuation form and are left alone. Idempotent: a brace alone on its
     line is never touched again. Writes go through the run, so `wrote:` names
-    them too (A8). Returns the number of braces reflowed in files written."""
+    them too (A8), and a file the view does not let it write is refused (OR4).
+    Returns the number of braces reflowed in files written."""
     run = run or FixRun(cfg)
-    _, claims, _ = run_checks(cfg, files, resolve=[])   # the named files' claims are all it needs
+    ov = (view.overrides_for(files) if view else None) or {}
+    _, claims, _ = run_checks(cfg, files, overrides=ov, resolve=[])  # the named files' claims suffice
+    ov = {Path(k).resolve(): v for k, v in ov.items()}
     by_file = {}
     for c in claims:
         if not c.brace_open or c.brace_open[0] != c.brace_close[0]:
@@ -1002,7 +1062,8 @@ def format_pass(cfg, files, run=None):
     changed = 0
     for relpath, items in by_file.items():
         p = cfg["dir"] / relpath
-        lines = p.read_text(encoding="utf-8").split("\n")
+        text = ov.get(p.resolve())
+        lines = (p.read_text(encoding="utf-8") if text is None else text).split("\n")
         n = 0
         for ln, col in sorted(items, key=lambda t: -t[0]):
             raw = lines[ln - 1]
@@ -1048,14 +1109,28 @@ class FixRun:
     """What one fix run wrote, and whether it may write. Every write goes through write(),
     so `wrote` holds exactly the files whose bytes this run changed -- the format pass's too
     (A8 of the 2026-09-24 build review) -- `pre` each written file's text from before the run
-    (A5), and `refused` the claims the editor would not touch because their live brace already
-    carries the key with another value (A1)."""
+    (A5), `blocked` the files the run had to write but the view does not allow (OR4: in hook
+    mode, a file whose working tree differs from its staged copy, or that has none), and
+    `refused` the claims the editor would not touch because their live brace already carries
+    the key with another value (A1)."""
 
-    def __init__(self, cfg):
+    def __init__(self, cfg, writable=None):
         self.cfg = cfg
-        self.wrote, self.pre, self.refused = set(), {}, []
+        self.writable = writable or (lambda relpath: True)
+        self.wrote, self.pre, self.blocked, self.refused = set(), {}, set(), []
+
+    def may_write(self, relpath):
+        """Asked BEFORE a file with pending edits is even read: a blocked file fails the run
+        whether or not its working-tree copy happens to hold the edit already -- a silent no-op
+        there would commit a half-link under R8 (K6)."""
+        if self.writable(relpath):
+            return True
+        self.blocked.add(relpath)
+        return False
 
     def write(self, relpath, text):
+        if not self.may_write(relpath):
+            return False
         p = self.cfg["dir"] / relpath
         old = p.read_text(encoding="utf-8") if p.is_file() else None
         if old == text:
@@ -1071,14 +1146,23 @@ class FixRun:
               "Nothing was written onto this claim.", file=sys.stderr)
 
 
-def apply_fixes(cfg, files, do_format=False, quiet=False, resolve=None, announce=False):
+def apply_fixes(cfg, files, do_format=False, quiet=False, view=None, announce=False,
+                outcome=None):
     """Assign missing ids, then (re-parsed) write missing reciprocal links and the status
     flips they entail -- into whichever file the linked claim lives in (R3: the fix follows
     the link). Prints `wrote: <relpath>` for every file it changed, unless quiet; always
-    under `announce` (the hook passes it, so it can stage exactly those files -- R8)."""
-    run = FixRun(cfg)
+    under `announce` (the hook passes it, so it can stage exactly those files -- R8).
+
+    `view` is where the corpus is read from and what may be written: DiskView by default,
+    IndexView under `--changed --hook` (A7, OR4). Exit 1 when the named files still gate, when
+    a file the fix had to write was not writable, when the editor refused a claim, or when
+    the run introduced a gating error into a file it followed a link into (A5). `outcome`, if
+    given, receives {"failed": [relpath, ...]} naming every file behind a failure."""
+    view = view or DiskView()
+    ov, pool = view.overrides_for(files), view.pool_for(files)
+    run = FixRun(cfg, view.writable)
     # pass 1: ids
-    errs, claims, _ = run_checks(cfg, files, resolve=resolve)
+    errs, claims, _ = run_checks(cfg, files, overrides=ov, resolve=pool)
     taken = {c.fields["id"] for c in claims if c.fields.get("id")} | corpus_ids(cfg)
     edits = {}  # relpath -> [(lineno, edit_fn)]
     for e in errs:
@@ -1089,7 +1173,7 @@ def apply_fixes(cfg, files, do_format=False, quiet=False, resolve=None, announce
     wrote = run.wrote
     # pass 2: reciprocals and status flips (ids may be fresh); claim-level, re-parsed at
     # write time so an edit into a file outside `files` lands on that file's live lines
-    errs, claims, _ = run_checks(cfg, files, resolve=resolve)
+    errs, claims, _ = run_checks(cfg, files, overrides=ov, resolve=pool)
     claim_edits = {}  # relpath -> {claim id -> {"append": [pairs], "status": value|None}}
     for e in errs:
         if not e.fix:
@@ -1106,28 +1190,36 @@ def apply_fixes(cfg, files, do_format=False, quiet=False, resolve=None, announce
             slot["status"] = "superseded"
     _apply_claim_edits(cfg, claim_edits, run)
     if do_format:
-        n = format_pass(cfg, files, run)
+        n = format_pass(cfg, files, run, view)
         if not quiet:
             print(f"format: {n} brace(s) reflowed to the indented-brace form "
                   f"(width {FORMAT_WIDTH})")
     if not quiet or announce:
         for rel in sorted(wrote):
             print(f"wrote: {rel}")
-    introduced = _introduced(cfg, run, files, resolve)
+    for rel in sorted(run.blocked):
+        print(f"kb-lint: REFUSED -- the fix must write {rel}, but its working-tree copy differs from "
+              "its staged copy (or it has no staged copy), so nothing was written to it. Stage or "
+              "stash its changes, then commit again.", file=sys.stderr)
+    introduced = _introduced(cfg, run, files, view)
     for rel, found in introduced:
         print(f"kb-lint: this fix run introduced a gating error into {rel}, a file it followed a "
               "link into -- the run fails; fix what is named, then run `kb-lint fix` again:",
               file=sys.stderr)
         for e in found:
             print(f"  {rel}:{e.line}  {e.check}  {e.msg}", file=sys.stderr)
-    errs, claims, nfiles = run_checks(cfg, files, resolve=resolve)
+    errs, claims, nfiles = run_checks(cfg, files, overrides=ov, resolve=pool)
     if not quiet:
         print("fix: done; re-check follows")
     rc = report(errs, claims, nfiles, quiet=quiet)
-    return 1 if (run.refused or introduced) else rc
+    if outcome is not None:
+        gating = {e.file for e in errs if e.cls == "G"}
+        outcome["failed"] = sorted(gating | run.blocked | set(run.refused)
+                                   | {rel for rel, _ in introduced})
+    return 1 if (run.refused or run.blocked or introduced) else rc
 
 
-def _introduced(cfg, run, files, resolve):
+def _introduced(cfg, run, files, view):
     """[(relpath, [Err])] for every file this run wrote that the caller did not name -- a file
     it followed a link into -- where THIS run introduced a gating finding (A5, stated default S2
     of the 2026-09-24 build review). The file is checked twice, as it stood before the run and
@@ -1142,9 +1234,7 @@ def _introduced(cfg, run, files, resolve):
         p = cfg["dir"] / rel
         if p.resolve() in named:
             continue
-        pool = None if resolve is None else (
-            [(q, t) for q, t in resolve if Path(q).resolve() != p.resolve()]
-            + [(f, None) for f in files])
+        pool = view.pool_for([p])
         before, _, _ = run_checks(cfg, [p], overrides=before_ov, resolve=pool)
         after, _, _ = run_checks(cfg, [p], resolve=pool)
         seen = Counter((e.check, e.msg) for e in before if e.cls == "G" and e.file == rel)
@@ -1242,6 +1332,8 @@ def _apply_claim_edits(cfg, claim_edits, run=None):
     run = run or FixRun(cfg)
     for relpath, per_claim in claim_edits.items():
         p = cfg["dir"] / relpath
+        if not run.may_write(relpath):
+            continue
         claims, _errs, _meta = check_file(p, cfg)
         lines = p.read_text(encoding="utf-8").split("\n")
         for c in sorted(claims, key=lambda c: -(c.brace_close[0] if c.brace_close else c.line)):
@@ -1265,6 +1357,8 @@ def _write_edits(cfg, edits, run=None):
     run = run or FixRun(cfg)
     for relpath, lst in edits.items():
         p = cfg["dir"] / relpath
+        if not run.may_write(relpath):
+            continue
         lines = p.read_text(encoding="utf-8").split("\n")
         for ln, fn in sorted(lst, key=lambda t: -t[0]):  # bottom-up keeps lines valid
             lines[ln - 1] = fn(lines[ln - 1])
@@ -1458,15 +1552,17 @@ def main():
         if not args.quiet:
             print("OK: nothing to lint")
         return 0
-    # the resolution pool: the rest of the corpus, from disk -- or, in hook context, from
-    # the INDEX, so a staged link is judged against what the commit will contain (R3)
-    pool = index_pool(cfg, files) if (args.changed and args.hook) else None
+    # where the corpus is read from: disk -- or, in hook context, the INDEX, staged files
+    # included, so a commit is judged on what it will contain (R3, A7), and the fix writes
+    # only files whose working tree equals their staged copy (OR4)
+    view = IndexView(cfg, files) if (args.changed and args.hook) else DiskView()
     if args.cmd == "check":
-        errs, claims, nfiles = run_checks(cfg, files, resolve=pool)
+        errs, claims, nfiles = run_checks(cfg, files, overrides=view.overrides_for(files),
+                                          resolve=view.pool_for(files))
         return report(errs, claims, nfiles, quiet=args.quiet)
     if args.cmd == "fix":
         return apply_fixes(cfg, files, do_format=args.format, quiet=args.quiet,
-                           resolve=pool, announce=args.hook)
+                           view=view, announce=args.hook)
     if args.cmd == "strip":
         return do_strip(cfg, files, args.out)
     if args.cmd == "stats":
