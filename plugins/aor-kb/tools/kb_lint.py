@@ -63,7 +63,6 @@ ISO_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 PAIR_RE = re.compile(r"^([a-z][a-z-]*):\s+(.+)$", re.DOTALL)
 KIND_RE = re.compile(r"^\[([a-z-]+)\]\s*(.*)$", re.DOTALL)
 ID_CHARS = "0123456789abcdefghijklmnopqrstuvwxyz"
-ID_IN_BRACE = re.compile(r"\bid:\s*([^,}\s]+)")
 EVIDENCE_KEYS = {"profile", "defaults", "review"}  # closed set of evidence: subkeys
 
 
@@ -1119,23 +1118,30 @@ def corpus_ids(cfg):
     was unique only within that file. A collision minted this way is not caught at
     write time and costs a claim at read time (see the L8 note in corpus_checks).
 
-    A text scan, not a parse: this needs ids, not claims, and it must not surface
-    errors from files the caller did not ask about. The GATE stays on the touched/staged
-    set; link RESOLUTION is corpus-wide (run_checks' pool), and the FIX follows a link into
-    the file its target lives in -- ruling R3 of 2026-09-24 (issue 73), which replaced the
-    earlier "keep FIX on the touched set" intent after a trace showed it leaves every
-    cross-file supersede half-linked, the old claim quarantined and never labelled.
+    Read through the parser (operator ruling OR13, item 3): the text scan this replaces read
+    ids only from `- [kind]` lines, so it missed every id in the continuation form -- a brace
+    on its own indented line, which is how every live claim is written (817 of 817, the round-2
+    check's Q7-a) -- and the avoid-set was empty on a real corpus. The parser finds a brace in
+    every form it accepts, which is exactly the set L8 compares. Its errors are discarded: this
+    must not surface findings from files the caller did not ask about.
     """
     ids = set()
     for f in corpus_files(cfg):
         try:
-            text = f.read_text(encoding="utf-8")
-        except OSError:
-            continue   # unreadable file cannot narrow the avoid-set; minting stays safe
-        for line in text.split(chr(10)):
-            if is_claim_line(line):
-                ids.update(ID_IN_BRACE.findall(line))
+            claims, _errs, _meta = check_file(f, cfg)
+        except (OSError, UnicodeDecodeError, SystemExit):
+            continue   # an unreadable file cannot narrow the avoid-set; minting stays safe
+        ids.update(c.fields["id"] for c in claims if c.fields.get("id"))
     return ids
+
+
+def write_utf8(path, text):
+    """Write `text` as UTF-8 with its newlines untranslated, ENCODING FIRST (operator ruling OR13,
+    item 1). Path.write_text opens the file for writing -- emptying it -- before the encoder runs, so
+    text that cannot be encoded (a lone surrogate) left an empty file behind a traceback. Here the
+    bytes exist before the file is opened, so a failure leaves the file as it was."""
+    data = text.encode("utf-8")
+    Path(path).write_bytes(data)
 
 
 class FixRun:
@@ -1169,7 +1175,7 @@ class FixRun:
         if old == text:
             return False
         self.pre.setdefault(relpath, old)
-        p.write_text(text, encoding="utf-8", newline="\n")
+        write_utf8(p, text)
         self.wrote.add(relpath)
         return True
 
@@ -1446,7 +1452,7 @@ def do_strip(cfg, files, outdir):
         if outdir:
             dest = Path(outdir) / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_text(out_text, encoding="utf-8", newline="\n")
+            write_utf8(dest, out_text)
         else:
             print(out_text)
     if outdir:
@@ -1533,7 +1539,7 @@ def refresh_index(cfg):
         concepts.append((rel[:-3], n))
     body = ("\n".join(f"- {slug} ({n} claim{'' if n == 1 else 's'})" for slug, n in concepts)
             if concepts else "_(empty -- capture lands concepts here)_")
-    index.write_text(fm + "\n# kb index\n\n" + body + "\n", encoding="utf-8", newline="\n")
+    write_utf8(index, fm + "\n# kb index\n\n" + body + "\n")
     return index
 
 
