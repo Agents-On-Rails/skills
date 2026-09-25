@@ -141,11 +141,20 @@ Run `kb-lint fix kb/` once after upgrading. What changes:
   REFUSED line names the claim that gates. The capture's dry run reports on that topic file only, so an
   error in another file never refuses it.
 - **A capture writes exactly what it was given, or nothing.** It parses the line it would append and
-  refuses at exit 2 unless the line reads back as exactly the given text and fields. So a `--text` that
-  ends in its own `{...}` block, or a value holding a brace, is refused: rephrase it. A double quote in a
-  brace value (`--src`, `--why` and the rest) is refused the same way, since the grammar cannot hold one
-  inside a quoted value; use single quotes. `--topic` must be a plain file name, with none of
-  `< > : " | ? *`.
+  refuses at exit 2, writing nothing, unless the line reads back as exactly the given text and fields.
+  Two inputs fail that test:
+  - a `--text` that ends in a `{...}` block when no field is given: the line has no brace of its own,
+    so that block would be read as the claim's metadata. With any field given, the text is written as
+    prose;
+  - a field value holding a `{` but none of `,` `}` `:`. It is written unquoted, and the `{` would
+    move where the metadata starts. A value holding `,`, `}` or `:` is quoted and written as given.
+
+  Also refused at exit 2: a double quote in a brace value (`--src`, `--why` and the rest), since the
+  grammar cannot hold one inside a quoted value (use single quotes); a control or line-break character
+  in any value, U+0085, U+2028 and U+2029 included; and text that cannot be written as UTF-8, such as
+  half of a surrogate pair. `--topic` must be a plain file name: no path segment may hold
+  `< > : " | ? *`, end in a dot or a space, or be a device name such as `nul`, and it may not name a
+  reserved file (`index.md`, `log.md`) in any letter case.
 - **A capture refuses when another file it would change has uncommitted changes**, staged or not. Such a
   file is one the fix after the write would write a back-link into: the file holding the claim that
   `--supersedes` or `--superseded-by` names, or one that a link from a claim already in the topic file
@@ -156,7 +165,7 @@ Run `kb-lint fix kb/` once after upgrading. What changes:
   step 5.)
 - **A machine-local hook's check now gates a fixable finding.** Under `kb-lint check --changed --hook`,
   a missing back-link, a missing id or a stale status that is still there at commit time refuses the
-  commit, because the fix could not land (see "Not in this preview").
+  commit, whether the hook's fix could not write it or no fix ran (see "Not in this preview").
 - **A query narrowed to a path resolves outgoing links only.** `kb-query kb/<file>.md` resolves a link
   from that file into another one. It does not compute a link into it from outside, so a claim
   superseded from another file whose back-link is missing is served there as current. Without the path,
@@ -181,7 +190,9 @@ that passes `--no-log` now exits 2, and the `kb/_serve/` directory can be delete
   index and writes only files whose working tree equals their staged copy. If a file it must write has
   unstaged changes, it writes nothing there, exits 1 and names the file; stage or stash that file, then
   commit again. As a backstop, `kb-lint check --changed --hook` refuses a commit that still carries any
-  fixable finding, because the fix could not land. **A hook can widen a commit.** The fix writes into
+  fixable finding. To clear it, run `kb-lint fix --changed --hook`, stage exactly the files it names, and
+  commit again; a plain `kb-lint fix` has no working-tree rule and can write into a file that holds
+  someone else's unstaged edits. **A hook can widen a commit.** The fix writes into
   any file a staged link points into, and a hook that stages the files the fix names stages each one
   whole. A hook that stages more than the fix names (`git add -u`, say) can also sweep another session's
   uncommitted edits into the commit.

@@ -40,8 +40,9 @@ output names: REFUSED before the append, nothing written (the lint gates; or a f
 file that the write or its fix would change has uncommitted changes, or git cannot report its state --
 also a --dry-run that would be refused, and `reconfirm` the same way), or WROTE
 and then the post-append fix pass failed on a named file - 2 usage/routing/boundary HALT, including an
-input refused before anything is written: a double quote in a brace value, a line that would not
-parse back to the text and fields given, or a --topic that is not a safe file name.
+input refused before anything is written: a control or line-break character, text that cannot be
+encoded as UTF-8, a double quote in a brace value, a line that would not parse back to the text and
+fields given, or a --topic that is not a safe file name or names a reserved file in any letter case.
 """
 
 import argparse
@@ -194,6 +195,11 @@ UNSAFE_NAME_CHARS = frozenset('<>:"|?*')
 DEVICE_NAME = re.compile(r"(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?", re.IGNORECASE)
 
 
+def _trimmed(values):
+    """{key: value trimmed} -- the one normalisation both sides of a round-trip comparison get (T10)."""
+    return {k: str(v).strip() for k, v in values.items()}
+
+
 def round_trip_problem(cfg, kind, text, fields, line):
     """OR7's round-trip guard (2026-09-25). Parse the EXACT line a capture would append with the
     parser's own function, and say what differs from what was given, or return None.
@@ -203,22 +209,25 @@ def round_trip_problem(cfg, kind, text, fields, line):
     `{...}` became the metadata brace when no field rendered one (the re-review's N1 = R2 --
     `v: ran-tool` laundered past the grade floor, a claim in another file retired); an unquoted
     `{` in a field value moved the brace's start and silently dropped the keys before it (R4);
-    and whatever shape has not been found yet. The claim's outer whitespace is not content (the
-    parser trims it), so the text and values compare trimmed."""
+    and whatever shape has not been found yet. Both sides compare trimmed, the text and every value
+    (T10, the round-2 check's M5 and Q2-c): the parser trims an unquoted value but gives a quoted one
+    back with its edge whitespace, so a trimmed copy of what was given against an untrimmed parse
+    refused `--src 'x, y '`, which reads back exactly as written. Edge whitespace cannot carry a key."""
     errs = []
     claims = kb_lint.parse_claim_items([line], 1, "(candidate)", errs, cfg)
     if len(claims) != 1:
         return f"the line parses as {len(claims)} claims"
     c = claims[0]
-    want = {k: str(v).strip() for k, v in fields if v is not None and v != ""}
+    want = _trimmed({k: v for k, v in fields if v is not None and v != ""})
+    got = _trimmed(c.fields)
     problems = []
     if c.kind != kind:
         problems.append(f"the kind parses as '{c.kind}'")
-    if c.text != text.strip():
+    if c.text.strip() != text.strip():
         problems.append(f"the text parses as '{c.text}'")
-    gained = sorted(set(c.fields) - set(want))
-    lost = sorted(set(want) - set(c.fields))
-    moved = sorted(k for k in set(want) & set(c.fields) if c.fields[k] != want[k])
+    gained = sorted(set(got) - set(want))
+    lost = sorted(set(want) - set(got))
+    moved = sorted(k for k in set(want) & set(got) if got[k] != want[k])
     if gained:
         problems.append("keys that were not given: " + ", ".join(gained))
     if lost:
@@ -230,9 +239,10 @@ def round_trip_problem(cfg, kind, text, fields, line):
 
 def refuse_round_trip(problem):
     die(f"the claim would not parse back to what was given ({problem}) -- the round-trip guard "
-        "(OR7) refuses the write: one capture writes exactly the text and fields it was given. A "
-        "--text ending in a {...} block, or a value holding a brace, is read by the parser as "
-        "metadata; rephrase it. Nothing was written.")
+        "(OR7) refuses the write: one capture writes exactly the text and fields it was given. With "
+        "no field given, a --text ending in a {...} block is read as the claim's metadata; a field "
+        "value holding '{' but none of , } : is written unquoted and moves where the metadata "
+        "starts. Rephrase it. Nothing was written.")
 
 
 def topic_path(root: Path, topic: str, reserved, kb_path):
@@ -256,6 +266,8 @@ def topic_path(root: Path, topic: str, reserved, kb_path):
     # traceback at exit 1 (the re-review's R5), and ':' named an alternate data stream or a
     # drive-relative path. Refused at exit 2, before anything is written.
     for seg in re.split(r"[\\/]", t):
+        if seg == ".":
+            continue   # './foo' names no directory of its own; it is not a name ending in a dot (T10)
         if set(seg) & UNSAFE_NAME_CHARS or seg != seg.rstrip(" .") or DEVICE_NAME.fullmatch(seg):
             die(f"--topic '{topic}' is not a safe file name: a path segment holds one of "
                 "< > : \" | ? *, ends in a dot or a space, or is a reserved device name (OR7). Use a "
@@ -903,11 +915,14 @@ def cmd_reconfirm(args, manifest):
     # its own text and exactly its old fields with the changes applied. An unquoted '{' in --src
     # moved the brace's start, dropped the id and v: into the prose, and the post-write fix then
     # minted a NEW id for the claim.
-    want = {k: str(v).strip() for k, v in c.fields.items()}
-    want.update({k: str(v).strip() for k, v in changes})
+    # Both sides trimmed, as in add's guard (T10): an existing quoted value with edge whitespace, or a
+    # --src that _q quotes with one, reads back exactly as written and is not a refusal.
+    want = dict(c.fields)
+    want.update({k: str(v) for k, v in changes})
     cand_claims = kb_lint.check_file(fp, cfg, text="\n".join(candidate))[0]
     parsed = next((p for p in cand_claims if p.line == c.line), None)
-    if parsed is None or parsed.text != c.text or parsed.fields != want:
+    if (parsed is None or parsed.text.strip() != c.text.strip()
+            or _trimmed(parsed.fields) != _trimmed(want)):
         refuse_round_trip("the edited brace parses as "
                           + ("no claim" if parsed is None else ", ".join(sorted(parsed.fields))))
     # OR12: reconfirm's post-write fix follows every incomplete link from the claims in this file, as

@@ -904,14 +904,22 @@ def gate_unfixed(errs):
     id-less claims (the re-review's N3 = R1). R2's "fixable" is amended for hook context only.
 
     Applied to EVERY fixable finding -- a missing back-link, a missing id, a stale status -- not
-    only the back-link the ruling names: the rationale is the same for each (a fix that could not
-    land), and R1's case 3 committed two id-less claims by the same mechanism. That width is
-    pending the operator's ratification (build review, OR8's note)."""
+    only the back-link the ruling names: the rationale is the same for each, and R1's case 3
+    committed two id-less claims by the same mechanism. That width is ruled (OR11, 2026-09-25).
+
+    The advice (round 3, T7 = the round-2 check's M4) is the hook-mode fix, which writes only files
+    whose working tree equals their staged copy and names each file it writes. A plain `kb-lint fix`
+    has no such rule: it would write into a file holding another session's unstaged draft, and
+    staging what it names would sweep the draft in. Nor does the line claim that a fix ran -- under
+    a hook that only checks, none did."""
     for e in errs:
         if e.cls == "F":
             e.cls = "G"
-            e.msg += (" -- still fixable at commit time, so the fix could not land: the commit is "
-                      "refused (OR8). Run `kb-lint fix`, stage what it names, and commit again")
+            e.msg += (" -- still fixable at commit time, so the commit is refused (OR8; the width is "
+                      "OR11). Run `kb-lint fix --changed --hook`: it writes only files whose working "
+                      "tree equals their staged copy and names each one it writes. Stage exactly those "
+                      "files and commit again. If it refuses a file, that file has unstaged changes: "
+                      "stage or stash them first")
 
 
 class DiskView:
