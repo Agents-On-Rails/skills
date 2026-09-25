@@ -963,6 +963,7 @@ class IndexView:
         kb_tmp = tmp / cfg["kb_path"]
         self.indexed = {f.relative_to(tmp).as_posix(): f.read_text(encoding="utf-8")
                         for f in (sorted(kb_tmp.rglob("*.md")) if kb_tmp.is_dir() else [])}
+        self._verdict = {}
 
     def _rel(self, f):
         return Path(f).resolve().relative_to(Path(self.cfg["dir"]).resolve()).as_posix()
@@ -984,7 +985,17 @@ class IndexView:
                 for rel in sorted(self.indexed) if rel not in named]
 
     def writable(self, relpath):
-        return relpath in self.indexed and relpath not in self.dirty
+        """OR4's rule, plus the re-review's N10 (row T3 of round 2): the dirty set is a snapshot
+        taken at start-up, and another live session can edit a clean file inside the hook's run,
+        so before a file's FIRST write its disk text must still equal its indexed text. Both are
+        read with newline translation, so a CRLF checkout under core.autocrlf compares equal.
+        The verdict is kept, so this run's own later writes to the file are not refused."""
+        if relpath not in self._verdict:
+            p = self.cfg["dir"] / relpath
+            disk = p.read_text(encoding="utf-8") if p.is_file() else None
+            self._verdict[relpath] = (relpath in self.indexed and relpath not in self.dirty
+                                      and disk == self.indexed[relpath])
+        return self._verdict[relpath]
 
 
 def run_checks(cfg, files, overrides=None, resolve=None):
