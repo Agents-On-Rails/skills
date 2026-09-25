@@ -169,6 +169,51 @@ def grade_floor_ok(kind, v_value, verified_in_session):
     return True
 
 
+UNSAFE_NAME_CHARS = frozenset('<>:"|?*')
+DEVICE_NAME = re.compile(r"(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?", re.IGNORECASE)
+
+
+def round_trip_problem(cfg, kind, text, fields, line):
+    """OR7's round-trip guard (2026-09-25). Parse the EXACT line a capture would append with the
+    parser's own function, and say what differs from what was given, or return None.
+
+    One capture must write exactly the claim it was given. Checking the written output instead
+    of a list of bad characters closes every break-out at once: a `--text` ending in its own
+    `{...}` became the metadata brace when no field rendered one (the re-review's N1 = R2 --
+    `v: ran-tool` laundered past the grade floor, a claim in another file retired); an unquoted
+    `{` in a field value moved the brace's start and silently dropped the keys before it (R4);
+    and whatever shape has not been found yet. The claim's outer whitespace is not content (the
+    parser trims it), so the text and values compare trimmed."""
+    errs = []
+    claims = kb_lint.parse_claim_items([line], 1, "(candidate)", errs, cfg)
+    if len(claims) != 1:
+        return f"the line parses as {len(claims)} claims"
+    c = claims[0]
+    want = {k: str(v).strip() for k, v in fields if v is not None and v != ""}
+    problems = []
+    if c.kind != kind:
+        problems.append(f"the kind parses as '{c.kind}'")
+    if c.text != text.strip():
+        problems.append(f"the text parses as '{c.text}'")
+    gained = sorted(set(c.fields) - set(want))
+    lost = sorted(set(want) - set(c.fields))
+    moved = sorted(k for k in set(want) & set(c.fields) if c.fields[k] != want[k])
+    if gained:
+        problems.append("keys that were not given: " + ", ".join(gained))
+    if lost:
+        problems.append("given keys missing: " + ", ".join(lost))
+    if moved:
+        problems.append("values that parse differently: " + ", ".join(moved))
+    return "; ".join(problems) or None
+
+
+def refuse_round_trip(problem):
+    die(f"the claim would not parse back to what was given ({problem}) -- the round-trip guard "
+        "(OR7) refuses the write: one capture writes exactly the text and fields it was given. A "
+        "--text ending in a {...} block, or a value holding a brace, is read by the parser as "
+        "metadata; rephrase it. Nothing was written.")
+
+
 def topic_path(root: Path, topic: str, reserved, kb_path):
     # SEC-001: --topic MUST stay inside <root>/<kb_path>. An absolute topic (pathlib would
     # discard `root` on join) or a `..` traversal would land the write in ANOTHER repo
@@ -186,6 +231,14 @@ def topic_path(root: Path, topic: str, reserved, kb_path):
         die(f"--topic '{topic}' must be a relative slug inside {kb_path}/ (no absolute path, "
             "no '..') -- refusing to escape the instance root (SEC-001)")
     t = topic if topic.endswith(".md") else topic + ".md"
+    # OR7 (2026-09-25): --topic must be a safe file name. A '"' crashed the write with an OSError
+    # traceback at exit 1 (the re-review's R5), and ':' named an alternate data stream or a
+    # drive-relative path. Refused at exit 2, before anything is written.
+    for seg in re.split(r"[\\/]", t):
+        if set(seg) & UNSAFE_NAME_CHARS or seg != seg.rstrip(" .") or DEVICE_NAME.fullmatch(seg):
+            die(f"--topic '{topic}' is not a safe file name: a path segment holds one of "
+                "< > : \" | ? *, ends in a dot or a space, or is a reserved device name (OR7). Use a "
+                "plain slug such as release-process. Nothing was written.")
     # A1: a reserved file is GENERATED, not authored. check_file returns class
     # 'reserved' and parses NO claims from one, so a claim appended here is never
     # id-assigned, never graded, and refresh_index rebuilds the file from the concept
@@ -430,6 +483,11 @@ def cmd_add(args, manifest):
     if "\n" in line or "\r" in line:
         die("assembled claim line is not a single line -- refusing to write, since one capture "
             "appends exactly one claim (SEC-PC-006)")
+    # OR7: the line must parse back to exactly the text and fields given -- before the dry run,
+    # the preview and the write, so a refused line is never previewed as GREEN either.
+    problem = round_trip_problem(cfg, args.kind, args.text, fields, line)
+    if problem:
+        refuse_round_trip(problem)
 
     # T8/G4: lint the candidate appended IN-MEMORY to the REAL target file (inheriting its
     # defaults:{src}), against the REAL corpus (L7 supersession targets + L8 id uniqueness
@@ -728,6 +786,17 @@ def cmd_reconfirm(args, manifest):
     for _k, _v in changes:
         after_brace = apply_to_brace(after_brace, _k, _v)
     candidate = splice_brace(lines, c, after_brace)
+    # OR7's round-trip guard, for the brace reconfirm rewrites: the edited claim must parse back to
+    # its own text and exactly its old fields with the changes applied. An unquoted '{' in --src
+    # moved the brace's start, dropped the id and v: into the prose, and the post-write fix then
+    # minted a NEW id for the claim.
+    want = {k: str(v).strip() for k, v in c.fields.items()}
+    want.update({k: str(v).strip() for k, v in changes})
+    parsed = next((p for p in kb_lint.check_file(fp, cfg, text="\n".join(candidate))[0]
+                   if p.line == c.line), None)
+    if parsed is None or parsed.text != c.text or parsed.fields != want:
+        refuse_round_trip("the edited brace parses as "
+                          + ("no claim" if parsed is None else ", ".join(sorted(parsed.fields))))
 
     if args.dry_run:
         print(f"[dry-run] {args.claim_id} ({c.kind}) -> {fp.relative_to(root).as_posix()}")
