@@ -910,11 +910,13 @@ def gate_unfixed(errs):
     The advice (round 3, T7 = the round-2 check's M4) is the hook-mode fix, which writes only files
     whose working tree equals their staged copy and names each file it writes. A plain `kb-lint fix`
     has no such rule: it would write into a file holding another session's unstaged draft, and
-    staging what it names would sweep the draft in. Nor does the line claim that a fix ran -- under
-    a hook that only checks, none did."""
+    staging what it names would sweep the draft in. The finding's own hint names that plain command
+    too, so it is rewritten to the hook-mode one on the same line. Nor does the line claim that a fix
+    ran -- under a hook that only checks, none did."""
     for e in errs:
         if e.cls == "F":
             e.cls = "G"
+            e.msg = e.msg.replace("`kb-lint fix`", "`kb-lint fix --changed --hook`")
             e.msg += (" -- still fixable at commit time, so the commit is refused (OR8; the width is "
                       "OR11). Run `kb-lint fix --changed --hook`: it writes only files whose working "
                       "tree equals their staged copy and names each one it writes. Stage exactly those "
