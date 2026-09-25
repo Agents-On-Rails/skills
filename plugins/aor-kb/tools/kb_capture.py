@@ -502,11 +502,16 @@ def cmd_add(args, manifest):
     # the 2026-09-23 panel traced that shape to a half-linked corpus and it was ruled out.
     errs, claims, nfiles, cand = preview_lint(cfg, fp, line)
     rel = fp.relative_to(root).as_posix()
+    swept = followed_file_changes(cfg, fp, args.supersedes)
     if args.dry_run:
         created = "new file" if not fp.is_file() else "append"
         print(f"[dry-run] {args.instance} -> {fp} ({created})")
         print(f"  {line}")
         rc = kb_lint.report(errs, claims, nfiles, quiet=args.quiet)
+        if rc == 0 and swept:
+            print("[dry-run] the write would be REFUSED, writing nothing: "
+                  + swept_account(args.supersedes, *swept))
+            return 1
         if not args.quiet:
             print("[dry-run] candidate lints GREEN in the real corpus (id assigned at write)"
                   if rc == 0 else
@@ -520,6 +525,10 @@ def cmd_add(args, manifest):
         cand_ln = cand.rstrip("\n").count("\n") + 1
         print(f"REFUSED -- NOTHING was written to {rel}. "
               + gating_account(gating, claims, relf, cand_ln, rel), file=sys.stderr)
+        return 1
+    if swept:
+        print(f"REFUSED -- NOTHING was written to {rel}. " + swept_account(args.supersedes, *swept),
+              file=sys.stderr)
         return 1
 
     created = append_claim(fp, line, cfg["profile"])
@@ -539,6 +548,40 @@ def cmd_add(args, manifest):
               "lines above say why). Exit 1 here means written, and the knowledge base needs that "
               "fixed before it will commit.", file=sys.stderr)
     return rc
+
+
+def followed_file_changes(cfg, fp, target_id):
+    """Operator ruling OR10 (2026-09-25): (relpath, why) when the file holding the claim this
+    capture supersedes differs from HEAD -- staged or not, or untracked -- else None.
+
+    The fix follows the link and writes the back-link into that file, and the capture page's
+    step 5 stages it whole, so another session's uncommitted edits there would ride into this
+    commit (the re-review's N4; OR4 closed the same sweep for the hook's fix, not for capture's).
+    Refused before anything is written, like OR4. Not applied when the superseded claim sits in
+    the capture's own topic file: that is the target topic file, whose sweep is recorded as open
+    and unruled. Not applied to --superseded-by, which OR10 does not name (open). A git that
+    cannot answer fails closed."""
+    if not target_id:
+        return None
+    here = fp.resolve()
+    for f in kb_lint.corpus_files(cfg):
+        if f.resolve() == here:
+            continue
+        if not any(c.fields.get("id") == target_id for c in kb_lint.check_file(f, cfg)[0]):
+            continue
+        relp = f.resolve().relative_to(Path(cfg["dir"]).resolve()).as_posix()
+        rc, out = kb_lint.run_git(cfg["dir"], "--no-optional-locks", "status", "--porcelain",
+                                  "--untracked-files=all", "--", relp)
+        if rc != 0:
+            return relp, f"whose state git could not report (git exited {rc})"
+        return (relp, "which has uncommitted changes (staged or not)") if out.strip() else None
+    return None
+
+
+def swept_account(target_id, relp, why):
+    return (f"The claim this supersedes, {target_id}, lives in {relp}, {why}: the fix would write the "
+            "back-link into that file, and staging it would carry those changes into your commit. "
+            f"Commit or stash {relp} first, then capture again (OR10).")
 
 
 def gating_account(gating, claims, relf, cand_ln, rel):
