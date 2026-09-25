@@ -893,6 +893,24 @@ def default_pool(cfg, files):
     return [(f, None) for f in corpus_files(cfg) if f.resolve() not in named]
 
 
+def gate_unfixed(errs):
+    """Operator ruling OR8 (2026-09-25): in hook context, a finding that is still FIXABLE when
+    `check --changed --hook` runs is a fix that could not land, so it gates. Without this, a hook
+    that ignores the fixer's exit (the operator's own, and any adopter's that runs the fix and
+    stages with `git add -u`) printed the fixer's REFUSED line and then committed a half-link, or
+    id-less claims (the re-review's N3 = R1). R2's "fixable" is amended for hook context only.
+
+    Applied to EVERY fixable finding -- a missing back-link, a missing id, a stale status -- not
+    only the back-link the ruling names: the rationale is the same for each (a fix that could not
+    land), and R1's case 3 committed two id-less claims by the same mechanism. That width is
+    pending the operator's ratification (build review, OR8's note)."""
+    for e in errs:
+        if e.cls == "F":
+            e.cls = "G"
+            e.msg += (" -- still fixable at commit time, so the fix could not land: the commit is "
+                      "refused (OR8). Run `kb-lint fix`, stage what it names, and commit again")
+
+
 class DiskView:
     """The corpus as the working tree holds it: every read from disk, every file writable.
     What `check`, `fix` and kb_capture use outside hook context."""
@@ -1559,6 +1577,8 @@ def main():
     if args.cmd == "check":
         errs, claims, nfiles = run_checks(cfg, files, overrides=view.overrides_for(files),
                                           resolve=view.pool_for(files))
+        if isinstance(view, IndexView):
+            gate_unfixed(errs)
         return report(errs, claims, nfiles, quiet=args.quiet)
     if args.cmd == "fix":
         return apply_fixes(cfg, files, do_format=args.format, quiet=args.quiet,
