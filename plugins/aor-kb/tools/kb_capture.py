@@ -83,18 +83,16 @@ FIELD_ORDER = ["v", "conf", "src", "seen", "confirmed", "status", "date", "until
 # ---------------------------------------------------------------- claim assembly
 
 def _q(v):
-    """Quote a brace value so the parser gives it back unchanged.
+    """Quote a brace value that holds a separator (',' or '}') or a ':', so the parser gives it
+    back unchanged.
 
-    The leading-quote arm is D2. kb_lint strips ONE leading/trailing quote
-    pair, so a value that already starts and ends with a quote came back stripped of its
-    own quotes -- silently, with no error, because nothing in the grammar was violated.
-    Quoting it makes the pair the parser removes ours rather than the value's.
-
-    Ten shapes were probed. The grammar cannot represent an odd number of quotes at all,
-    and those six fail CLOSED with an L2 both before and after this change; the pin for
-    that is D2-2. This arm is the one shape that was lossy instead of loud.
+    A value holding a double quote never reaches here from the CLI: OR5 refuses it, and OR7's
+    round-trip guard refuses any line that would not parse back to what was given. The arm that
+    quoted a value already starting with a quote (D2) was reachable only through such a value,
+    so it went with OR5 (the re-review's N17). The grammar cannot represent an odd number of
+    quotes at all; those shapes still fail CLOSED with an L2, pinned by D2-2.
     """
-    return f'"{v}"' if ("," in v or "}" in v or ":" in v or v.startswith('"')) else v
+    return f'"{v}"' if ("," in v or "}" in v or ":" in v) else v
 
 
 # A claim line is assembled as ONE string and render_appended writes it verbatim, so a control
