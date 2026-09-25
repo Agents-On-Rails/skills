@@ -36,8 +36,9 @@ writes quarantine grades (v: unverified / model-inferred) plus author-asserted f
 the verified grades ran-tool / read-primary-source require --verified-in-session (the
 operator affirming the act happened this session). Upgrades otherwise need a later real
 v-event. Exit codes: 0 ok (3 = a required dependency is not installed) - 1 in one of two cases the
-output names: REFUSED before the append, nothing written (the lint gates; or another topic file holding
-the claim this supersedes has uncommitted changes -- also a --dry-run that would be refused), or WROTE
+output names: REFUSED before the append, nothing written (the lint gates; or a file other than the topic
+file that the write or its fix would change has uncommitted changes, or git cannot report its state --
+also a --dry-run that would be refused, and `reconfirm` the same way), or WROTE
 and then the post-append fix pass failed on a named file - 2 usage/routing/boundary HALT, including an
 input refused before anything is written: a double quote in a brace value, a line that would not
 parse back to the text and fields given, or a --topic that is not a safe file name.
@@ -504,15 +505,14 @@ def cmd_add(args, manifest):
     # the 2026-09-23 panel traced that shape to a half-linked corpus and it was ruled out.
     errs, claims, nfiles, cand = preview_lint(cfg, fp, line)
     rel = fp.relative_to(root).as_posix()
-    swept = followed_file_changes(cfg, fp, args.supersedes)
+    swept = swept_files(cfg, fp, claims)
     if args.dry_run:
         created = "new file" if not fp.is_file() else "append"
         print(f"[dry-run] {args.instance} -> {fp} ({created})")
         print(f"  {line}")
         rc = kb_lint.report(errs, claims, nfiles, quiet=args.quiet)
         if rc == 0 and swept:
-            print("[dry-run] the write would be REFUSED, writing nothing: "
-                  + swept_account(args.supersedes, *swept))
+            print("[dry-run] the write would be REFUSED, writing nothing: " + swept_account(swept))
             return 1
         if not args.quiet:
             print("[dry-run] candidate lints GREEN in the real corpus (id assigned at write)"
@@ -529,8 +529,7 @@ def cmd_add(args, manifest):
               + gating_account(gating, claims, relf, cand_ln, rel), file=sys.stderr)
         return 1
     if swept:
-        print(f"REFUSED -- NOTHING was written to {rel}. " + swept_account(args.supersedes, *swept),
-              file=sys.stderr)
+        print(f"REFUSED -- NOTHING was written to {rel}. " + swept_account(swept), file=sys.stderr)
         return 1
 
     created = append_claim(fp, line, cfg["profile"])
@@ -552,38 +551,80 @@ def cmd_add(args, manifest):
     return rc
 
 
-def followed_file_changes(cfg, fp, target_id):
-    """Operator ruling OR10 (2026-09-25): (relpath, why) when the file holding the claim this
-    capture supersedes differs from HEAD -- staged or not, or untracked -- else None.
+def followed_files(cfg, fp, claims):
+    """{relpath: [target id, ...]} for every file OTHER than `fp` that the fix after this write would
+    write into. `claims` are fp's claims as they will stand after the write (the preview's candidate).
 
-    The fix follows the link and writes the back-link into that file, and the capture page's
-    step 5 stages it whole, so another session's uncommitted edits there would ride into this
-    commit (the re-review's N4; OR4 closed the same sweep for the hook's fix, not for capture's).
-    Refused before anything is written, like OR4. Not applied when the superseded claim sits in
-    the capture's own topic file: that is the target topic file, whose sweep is recorded as open
-    and unruled. Not applied to --superseded-by, which OR10 does not name (open). A git that
-    cannot answer fails closed."""
-    if not target_id:
-        return None
+    The fix writes into another file only to complete a link: the reciprocal, and the status flip it
+    entails, land on the claim at the link's other end (kb_lint.corpus_checks' reciprocal pass, then
+    _apply_claim_edits). So the files are those holding the other end of a link from a claim in fp
+    whose pair is not complete -- the new claim's --supersedes or --superseded-by, or a claim already
+    in fp: a legacy half-link, or an id-less claim whose link the fix completes once its id is
+    assigned. A target resolves the way corpus_checks resolves it: an id in fp itself first, then the
+    first claim-file claim that holds it. A pair that cannot be completed (a tombstone, a second
+    successor) gates in the preview, and that refusal comes first."""
     here = fp.resolve()
+    own = {c.fields.get("id") for c in claims if c.fields.get("id")}
+    by_id = {}
     for f in kb_lint.corpus_files(cfg):
         if f.resolve() == here:
             continue
-        if not any(c.fields.get("id") == target_id for c in kb_lint.check_file(f, cfg)[0]):
+        try:
+            fclaims, _errs, meta = kb_lint.check_file(f, cfg)
+        except SystemExit:
+            continue   # outside the config root: it resolves nothing (run_checks' pool does the same)
+        if meta["class"] != "claim":
             continue
-        relp = f.resolve().relative_to(Path(cfg["dir"]).resolve()).as_posix()
-        rc, out = kb_lint.run_git(cfg["dir"], "--no-optional-locks", "status", "--porcelain",
-                                  "--untracked-files=all", "--", relp)
+        for c in fclaims:
+            kid = c.fields.get("id")
+            if c.kind_valid and kid and cfg["id_format"].match(kid):
+                by_id.setdefault(kid, c)
+    out = {}
+    for c in claims:
+        cid = c.fields.get("id")
+        for key, recip in (("supersedes", "superseded-by"), ("superseded-by", "supersedes")):
+            tgt = c.fields.get(key)
+            if not tgt or tgt in own or tgt not in by_id:
+                continue
+            other = by_id[tgt]
+            if cid and other.fields.get(recip) == cid:
+                continue   # the pair is complete: the fix writes nothing there
+            out.setdefault(other.file, []).append(tgt)
+    return out
+
+
+def swept_files(cfg, fp, claims):
+    """Operator ruling OR12 (2026-09-25), which widens OR10: [(relpath, target ids, why)] for every
+    file other than the capture's topic file that its write or its fix would change and that differs
+    from HEAD -- staged or not, or untracked. The capture refuses before writing anything, and its dry
+    run says it would.
+
+    The fix writes a back-link into such a file, and the capture page's step 5 stages it whole, so
+    uncommitted edits there -- another session's, or this session's own from earlier in a batch --
+    would ride into this commit (the re-review's N4; the round-2 check's Q5 reading 2 and M2). Every
+    route counts: --supersedes, --superseded-by, and the fix following a link from a claim already in
+    the topic file. A git that cannot answer fails closed.
+
+    Not checked: the topic file itself (OR12: it stays documented -- step 5 has the agent look at
+    `git diff HEAD` on it), and the generated kb/index.md, which every capture rebuilds whole from the
+    corpus and which holds no authored content (a stated default of round 3: counting it would refuse
+    every batch's second capture, a cost OR12 does not name)."""
+    out = []
+    for relp, ids in sorted(followed_files(cfg, fp, claims).items()):
+        rc, st = kb_lint.run_git(cfg["dir"], "--no-optional-locks", "status", "--porcelain",
+                                 "--untracked-files=all", "--", relp)
         if rc != 0:
-            return relp, f"whose state git could not report (git exited {rc})"
-        return (relp, "which has uncommitted changes (staged or not)") if out.strip() else None
-    return None
+            out.append((relp, ids, f"whose state git could not report (git exited {rc})"))
+        elif st.strip():
+            out.append((relp, ids, "which has uncommitted changes (staged or not)"))
+    return out
 
 
-def swept_account(target_id, relp, why):
-    return (f"The claim this supersedes, {target_id}, lives in {relp}, {why}: the fix would write the "
-            "back-link into that file, and staging it would carry those changes into your commit. "
-            f"Commit or stash {relp} first, then capture again (OR10).")
+def swept_account(swept):
+    files = "; ".join(f"{relp} (onto {', '.join(ids)}), {why}" for relp, ids, why in swept)
+    return (f"The fix after this write would also write into {files}. Staging that whole would carry "
+            "those changes into your commit (OR12). If they are this session's own earlier captures or "
+            "reconfirms, commit them first, then continue; if they are not, stop and ask the operator.")
 
 
 def gating_account(gating, claims, relf, cand_ln, rel):
@@ -835,14 +876,18 @@ def cmd_reconfirm(args, manifest):
     # minted a NEW id for the claim.
     want = {k: str(v).strip() for k, v in c.fields.items()}
     want.update({k: str(v).strip() for k, v in changes})
-    parsed = next((p for p in kb_lint.check_file(fp, cfg, text="\n".join(candidate))[0]
-                   if p.line == c.line), None)
+    cand_claims = kb_lint.check_file(fp, cfg, text="\n".join(candidate))[0]
+    parsed = next((p for p in cand_claims if p.line == c.line), None)
     if parsed is None or parsed.text != c.text or parsed.fields != want:
         refuse_round_trip("the edited brace parses as "
                           + ("no claim" if parsed is None else ", ".join(sorted(parsed.fields))))
+    # OR12: reconfirm's post-write fix follows every incomplete link from the claims in this file, as
+    # add's does, so it refuses on the same files, before anything is written (the round-2 check's M2).
+    swept = swept_files(cfg, fp, [p for p in cand_claims if p.kind_valid])
+    relfp = fp.relative_to(root).as_posix()
 
     if args.dry_run:
-        print(f"[dry-run] {args.claim_id} ({c.kind}) -> {fp.relative_to(root).as_posix()}")
+        print(f"[dry-run] {args.claim_id} ({c.kind}) -> {relfp}")
         print(f"  before  {before_brace}")
         print(f"  after   {after_brace}")
         # Lint the candidate IN MEMORY against the real corpus, the way add's dry-run does: a
@@ -851,16 +896,21 @@ def cmd_reconfirm(args, manifest):
         errs, claims, nfiles = kb_lint.run_checks(
             cfg, files, overrides={fp: "\n".join(candidate)})
         rc = kb_lint.report(errs, claims, nfiles, quiet=args.quiet)
+        if rc == 0 and swept:
+            print("[dry-run] the write would be REFUSED, writing nothing: " + swept_account(swept))
+            return 1
         if not args.quiet:
             print("[dry-run] candidate lints GREEN in the real corpus; nothing was written"
                   if rc == 0 else
                   "[dry-run] candidate FAILS the real lint -- the write would be rejected "
                   "the same way")
         return rc
+    if swept:
+        print(f"REFUSED -- NOTHING was written to {relfp}. " + swept_account(swept), file=sys.stderr)
+        return 1
 
     fp.write_text("\n".join(candidate), encoding="utf-8", newline="\n")
-    print(f"reconfirmed {args.claim_id} ({c.kind}) in "
-          f"{fp.relative_to(root).as_posix()} (instance '{args.instance}', boundary OK)")
+    print(f"reconfirmed {args.claim_id} ({c.kind}) in {relfp} (instance '{args.instance}', boundary OK)")
 
     # Post-write lint gate, deliberately WITHOUT the format pass and WITHOUT refresh_index
     # (DoD 10 asks for both to be decisions, not accidents):

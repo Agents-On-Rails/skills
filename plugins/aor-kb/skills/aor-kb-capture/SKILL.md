@@ -88,14 +88,14 @@ in plain language — the operator sees only "this folder" + "work KB / personal
    Show the exact claim line + the resolved **repo path** it will land in. Ask the user to confirm by **naming the instance** ("yes, work" / "yes, personal") — not a bare "ok".
    - **Folded personal confirm (SEC-002):** if `--instance personal` from a **`both`** or unattested folder, that same "yes, personal" IS the safety confirm — phrase it *"…and this folder feeds both KBs, so confirming: this note is personal, not work? It syncs to personal GitHub."* Only on a "yes, personal" do you add `--confirm-personal` at step 5.
 5. **Write, and commit in the same step** (drop `--dry-run`, and do not pass `--quiet`: it hides the fix's `wrote:` lines, which this step reads; add `--confirm-personal` only per the folded confirm above). Read the exit code, then:
-   - **Exit 0** = written and linted clean. Commit at once in the instance repo, staging `kb/index.md` and **every path the write printed after `wrote`**: the topic file, plus any other topic file the fix wrote into because a `--supersedes` target lives there. Both halves of a link go into one commit; a half-linked commit is served as quarantined. Each file is staged whole, so first look at `git -C <repo-root> diff -- <file>` for each: the topic file you appended to may also hold another session's uncommitted claim, and that would ride into this commit. If it does, stop and ask the operator.
+   - **Exit 0** = written and linted clean. Commit at once in the instance repo, staging `kb/index.md` and **every path the write printed after `wrote`**: the topic file, plus any other topic file the fix wrote into because the other end of a link lives there. Both halves of a link go into one commit; a half-linked commit is served as quarantined. Each file is staged whole, so first look at `git -C <repo-root> diff -- <file>` for each: the topic file you appended to may also hold another session's uncommitted claim, and that would ride into this commit. If it does, stop and ask the operator.
      ```
      git -C <repo-root> add kb/index.md <every path printed after "wrote"> && git -C <repo-root> commit -m "kb: capture <short note>"
      ```
    - **Exit 1 with `REFUSED`** = **nothing was written**. The REFUSED line names what stops the write:
      - the new claim itself: a target that exists nowhere, a `deprecated` target, or a target another claim already supersedes;
      - a claim already in that topic file, which must be fixed before anything can be appended there;
-     - or another topic file that holds the claim you supersede and has uncommitted changes. Ask the operator to commit or stash that file, then capture again.
+     - or another topic file that the write or its fix would change and that has uncommitted changes: the file holding a claim you supersede or are superseded by, or one that a link from a claim already in your topic file points into. If those changes are your own captures or reconfirms from earlier in this session, commit them first, then continue; otherwise ask the operator.
 
      There is nothing to commit.
    - **Exit 1 with `WROTE … then the fix pass failed on <file>`** = the claim **is** on disk, but the named file does not lint. Report it and fix what is named before you commit; never commit a file the fix pass failed on.
