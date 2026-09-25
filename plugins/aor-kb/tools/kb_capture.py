@@ -36,8 +36,8 @@ writes quarantine grades (v: unverified / model-inferred) plus author-asserted f
 the verified grades ran-tool / read-primary-source require --verified-in-session (the
 operator affirming the act happened this session). Upgrades otherwise need a later real
 v-event. Exit codes: 0 ok (3 = a required dependency is not installed) - 1 in one of two cases the
-output names: REFUSED before the append, nothing written (the lint gates; or the file holding the
-claim this supersedes has uncommitted changes -- also a --dry-run that would be refused), or WROTE
+output names: REFUSED before the append, nothing written (the lint gates; or another topic file holding
+the claim this supersedes has uncommitted changes -- also a --dry-run that would be refused), or WROTE
 and then the post-append fix pass failed on a named file - 2 usage/routing/boundary HALT, including an
 input refused before anything is written: a double quote in a brace value, a line that would not
 parse back to the text and fields given, or a --topic that is not a safe file name.

@@ -95,7 +95,7 @@ in plain language — the operator sees only "this folder" + "work KB / personal
    - **Exit 1 with `REFUSED`** = **nothing was written**. The REFUSED line names what stops the write:
      - the new claim itself: a target that exists nowhere, a `deprecated` target, or a target another claim already supersedes;
      - a claim already in that topic file, which must be fixed before anything can be appended there;
-     - or the file holding the claim you supersede, which has uncommitted changes. Ask the operator to commit or stash that file, then capture again.
+     - or another topic file that holds the claim you supersede and has uncommitted changes. Ask the operator to commit or stash that file, then capture again.
 
      There is nothing to commit.
    - **Exit 1 with `WROTE … then the fix pass failed on <file>`** = the claim **is** on disk, but the named file does not lint. Report it and fix what is named before you commit; never commit a file the fix pass failed on.

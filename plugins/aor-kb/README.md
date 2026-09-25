@@ -146,9 +146,10 @@ Run `kb-lint fix kb/` once after upgrading. What changes:
   brace value (`--src`, `--why` and the rest) is refused the same way, since the grammar cannot hold one
   inside a quoted value; use single quotes. `--topic` must be a plain file name, with none of
   `< > : " | ? *`.
-- **A capture refuses a supersede whose target's file has uncommitted changes**, staged or not. It exits
-  1 with REFUSED, writes nothing, and names the file; commit or stash it first. The fix would write the
-  back-link into that file, and committing it would carry those changes too.
+- **A capture refuses a supersede whose target lives in another topic file with uncommitted changes**,
+  staged or not. It exits 1 with REFUSED, writes nothing, and names the file; commit or stash it first.
+  The fix would write the back-link into that file, and committing it would carry those changes too.
+  (The topic file the capture appends to is not checked; see the capture page's step 5.)
 - **A machine-local hook's check now gates a fixable finding.** Under `kb-lint check --changed --hook`,
   a missing back-link, a missing id or a stale status that is still there at commit time refuses the
   commit, because the fix could not land (see "Not in this preview").
