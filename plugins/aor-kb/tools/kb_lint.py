@@ -6,7 +6,11 @@ Skeleton lifted from agentskills/agentskills (skills-ref) @ 0c0c567, validator.p
 closed ALLOWED set, per-field validators returning error lists, parse/validate split.
 
 Checks L1-L8; G = gating (hard reject), F = fixable (`kb-lint fix` repairs).
-Exit codes are the API: 0 clean - 1 gating errors - 2 usage/config error - 3 a required dependency is not installed.
+Exit codes are the API: 0 clean - 1 gating errors (for `fix`, also: a write it refused -- a file whose
+working tree differs from its staged copy in hook mode, or a claim whose live brace already holds another
+value -- or a gating error it introduced into a file it followed a link into; under `check --changed
+--hook`, also any fixable finding still present) - 2 usage/config error - 3 a required dependency is not
+installed.
 Subcommands: check (default) / fix / strip / stats.
 """
 

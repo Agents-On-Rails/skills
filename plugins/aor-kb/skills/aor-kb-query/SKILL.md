@@ -1,6 +1,6 @@
 ---
 name: aor-kb-query
-description: Search your evidence-graded knowledge base (personal or work) and get back only trustworthy claims, each stamped with its trust label. Thin wrapper over the OKF-E kb_query CLI. USE PROACTIVELY, not only on request — BEFORE designing, debugging, or deciding in a domain past sessions may already have paid for (build and release tooling, environment quirks that keep recurring, dependency pinning, past incidents, and per-repo topics named after the repo), query first and re-derive second; the live topic list is kb/index.md. Also fires on "what do we know about X", prior lessons, past findings.
+description: Search your evidence-graded knowledge base (personal or work) and get back the matching claims, each stamped with its trust label, which says how the claim is known; quarantined and retired claims are held back unless you ask for them. Thin wrapper over the OKF-E kb_query CLI. USE PROACTIVELY, not only on request — BEFORE designing, debugging, or deciding in a domain past sessions may already have paid for (build and release tooling, environment quirks that keep recurring, dependency pinning, past incidents, and per-repo topics named after the repo), query first and re-derive second; the live topic list is kb/index.md. Also fires on "what do we know about X", prior lessons, past findings.
 allowed-tools: Bash, AskUserQuestion
 argument-hint: "[personal|work] [what you're looking for] | help"
 license: MIT
@@ -54,7 +54,7 @@ stop — do not guess an alternative interpreter or path.
 ## HELP
 
 ```
-aor-kb-query — search your evidence-graded KB and get back only trustworthy claims, each with its trust label.
+aor-kb-query — search your evidence-graded KB and get back the matching claims, each with its trust label.
 
 WHAT IT DOES  Reads ONE KB (personal or work), filters to what you ask for, and prints every matching
               claim WITH its trust label, which says how the claim is known. The label informs; it does

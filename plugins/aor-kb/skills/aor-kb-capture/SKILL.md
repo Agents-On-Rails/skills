@@ -87,16 +87,21 @@ in plain language — the operator sees only "this folder" + "work KB / personal
    ```
    Show the exact claim line + the resolved **repo path** it will land in. Ask the user to confirm by **naming the instance** ("yes, work" / "yes, personal") — not a bare "ok".
    - **Folded personal confirm (SEC-002):** if `--instance personal` from a **`both`** or unattested folder, that same "yes, personal" IS the safety confirm — phrase it *"…and this folder feeds both KBs, so confirming: this note is personal, not work? It syncs to personal GitHub."* Only on a "yes, personal" do you add `--confirm-personal` at step 5.
-5. **Write, and commit in the same step** (drop `--dry-run`; add `--confirm-personal` only per the folded confirm above). Read the exit code, then:
-   - **Exit 0** = written and linted clean. Commit at once in the instance repo, staging `kb/index.md` and **every path the write printed after `wrote`**: the topic file, plus any other topic file the fix wrote into because a `--supersedes` target lives there. Both halves of a link go into one commit; a half-linked commit is served as quarantined.
+5. **Write, and commit in the same step** (drop `--dry-run`, and do not pass `--quiet`: it hides the fix's `wrote:` lines, which this step reads; add `--confirm-personal` only per the folded confirm above). Read the exit code, then:
+   - **Exit 0** = written and linted clean. Commit at once in the instance repo, staging `kb/index.md` and **every path the write printed after `wrote`**: the topic file, plus any other topic file the fix wrote into because a `--supersedes` target lives there. Both halves of a link go into one commit; a half-linked commit is served as quarantined. Each file is staged whole, so first look at `git -C <repo-root> diff -- <file>` for each: the topic file you appended to may also hold another session's uncommitted claim, and that would ride into this commit. If it does, stop and ask the operator.
      ```
      git -C <repo-root> add kb/index.md <every path printed after "wrote"> && git -C <repo-root> commit -m "kb: capture <short note>"
      ```
-   - **Exit 1 with `REFUSED`** = **nothing was written**. The REFUSED line names what gates. It is either the new claim (a target that exists nowhere, a `deprecated` target, a target another claim already supersedes), or a claim already in that topic file, which must be fixed before anything can be appended there. There is nothing to commit.
-   - **Exit 1 with `WROTE … then the fix pass failed on <file>`** = the claim **is** on disk, but the named file does not lint. Report it and fix what is named before you commit; never commit a file the fix pass failed on.
-   - **Exit 2** = a routing/boundary/workspace HALT, or an input refused before anything was written (a double quote in a brace value: rephrase with single quotes). Report it, or handle a `CONFIRM: -> personal` HALT by asking "yes, personal" then re-running with `--confirm-personal`.
+   - **Exit 1 with `REFUSED`** = **nothing was written**. The REFUSED line names what stops the write:
+     - the new claim itself: a target that exists nowhere, a `deprecated` target, or a target another claim already supersedes;
+     - a claim already in that topic file, which must be fixed before anything can be appended there;
+     - or the file holding the claim you supersede, which has uncommitted changes. Ask the operator to commit or stash that file, then capture again.
 
-   **No pre-commit hook ships with this preview** (see README); the boundary and lint checks already ran before the write. An instance may carry its own machine-local hook. Where one runs, a refusal at commit is the gate working (fix what it names and commit again), and it is never bypassed. **Such a hook can widen the commit:** its fix pass can write into a linked topic file and stage that file whole. It refuses to write a file that has unstaged changes, and names it; stage or stash that file, then commit again.
+     There is nothing to commit.
+   - **Exit 1 with `WROTE … then the fix pass failed on <file>`** = the claim **is** on disk, but the named file does not lint. Report it and fix what is named before you commit; never commit a file the fix pass failed on.
+   - **Exit 2** = a routing/boundary/workspace HALT, or an input refused before anything was written. The input cases: a double quote in a brace value (rephrase with single quotes); a `--text` or value that would not read back exactly as given, such as a `--text` ending in its own `{...}` block or a value holding a brace (rephrase it); or a `--topic` that is not a plain file name. Report it, or handle a `CONFIRM: -> personal` HALT by asking "yes, personal" then re-running with `--confirm-personal`.
+
+   **No pre-commit hook ships with this preview** (see README); the boundary and lint checks already ran before the write. An instance may carry its own machine-local hook. Where one runs, a refusal at commit is the gate working (fix what it names and commit again), and it is never bypassed. **Such a hook can widen the commit:** its fix pass can write into a linked topic file and stage that file whole. It refuses to write a file that has unstaged changes, names it and exits non-zero; the hook must stop on that exit. Stage or stash that file, then commit again. Its check also refuses a commit that still carries any fixable finding.
    **Pushing is operator-gated (Tier-2)**: do not push unless the operator says so.
 
 ## HELP

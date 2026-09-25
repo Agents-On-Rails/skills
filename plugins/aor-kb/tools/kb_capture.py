@@ -35,10 +35,12 @@ Grade floor (§14.2.6 + §14.5 honesty gate): capture is a RECORDER, not a verif
 writes quarantine grades (v: unverified / model-inferred) plus author-asserted freely;
 the verified grades ran-tool / read-primary-source require --verified-in-session (the
 operator affirming the act happened this session). Upgrades otherwise need a later real
-v-event. Exit codes: 0 ok (3 = a required dependency is not installed) - 1 lint gating, in one of two
-cases the output names: REFUSED before the append (nothing written; also a --dry-run candidate that
-fails the real lint), or WROTE and then the post-append fix pass failed on a named file - 2 usage/
-routing/boundary HALT, including a double quote in a brace value.
+v-event. Exit codes: 0 ok (3 = a required dependency is not installed) - 1 in one of two cases the
+output names: REFUSED before the append, nothing written (the lint gates; or the file holding the
+claim this supersedes has uncommitted changes -- also a --dry-run that would be refused), or WROTE
+and then the post-append fix pass failed on a named file - 2 usage/routing/boundary HALT, including an
+input refused before anything is written: a double quote in a brace value, a line that would not
+parse back to the text and fields given, or a --topic that is not a safe file name.
 """
 
 import argparse
@@ -545,8 +547,8 @@ def cmd_add(args, manifest):
         # A11 (S3): exit 1 after a write is a different case from a refusal, and says so
         failed = ", ".join(outcome.get("failed") or []) or "a file named above"
         print(f"WROTE {rel} -- the claim is on disk; then the fix pass failed on {failed} (the "
-              "lines above say why). Exit 1 here means written, and the knowledge base needs that "
-              "fixed before it will commit.", file=sys.stderr)
+              "lines above say why). Exit 1 here means written, and the named file does not lint: "
+              "fix it before you commit.", file=sys.stderr)
     return rc
 
 

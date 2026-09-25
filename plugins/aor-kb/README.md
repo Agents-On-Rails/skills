@@ -116,14 +116,15 @@ Run `kb-lint fix kb/` once after upgrading. What changes:
   `promoted-to:`). A claim that already carries a `superseded-by:` link with an older status is
   reported as fixable (`stale status`), and that one `fix` run repairs it. A `deprecated` claim is
   never flipped.
-- **Some supersedes are refused before anything is written**, with a gating error on the claim that
-  carries the link:
+- **Some supersedes are refused**, with a gating error on the claim that carries the link, and the
+  claim they point at is never written. A capture that would create one writes nothing at all; a
+  `kb-lint fix` run still makes its other repairs, such as assigning a missing id. The refused shapes:
   - onto a `deprecated` claim, even when both links are already in place: write the corrected claim
     without a link and leave the tombstone. A tombstone that carries `superseded-by:` itself gates
     too; remove that link;
   - onto a claim another claim already supersedes: supersede the chain head instead. If the older
-    claim has no `superseded-by:` yet, every claim superseding it gates, and nothing is written until
-    you remove all but one of those links by hand;
+    claim has no `superseded-by:` yet, every claim superseding it gates, and no back-link is written
+    until you remove all but one of those links by hand;
   - a claim whose `superseded-by:` names a claim that supersedes a different one, and two claims
     naming the same successor when that successor links back to neither.
 
@@ -139,12 +140,24 @@ Run `kb-lint fix kb/` once after upgrading. What changes:
 - **A capture into a topic file with any gating error is refused**, and nothing is written; the
   REFUSED line names the claim that gates. The capture's dry run reports on that topic file only, so an
   error in another file never refuses it.
-- **A capture refuses a double quote in a brace value** (`--src`, `--why` and the rest) at exit 2: the
-  grammar cannot hold one inside a quoted value. Use single quotes instead.
+- **A capture writes exactly what it was given, or nothing.** It parses the line it would append and
+  refuses at exit 2 unless the line reads back as exactly the given text and fields. So a `--text` that
+  ends in its own `{...}` block, or a value holding a brace, is refused: rephrase it. A double quote in a
+  brace value (`--src`, `--why` and the rest) is refused the same way, since the grammar cannot hold one
+  inside a quoted value; use single quotes. `--topic` must be a plain file name, with none of
+  `< > : " | ? *`.
+- **A capture refuses a supersede whose target's file has uncommitted changes**, staged or not. It exits
+  1 with REFUSED, writes nothing, and names the file; commit or stash it first. The fix would write the
+  back-link into that file, and committing it would carry those changes too.
+- **A machine-local hook's check now gates a fixable finding.** Under `kb-lint check --changed --hook`,
+  a missing back-link, a missing id or a stale status that is still there at commit time refuses the
+  commit, because the fix could not land (see "Not in this preview").
 - **A query narrowed to a path resolves outgoing links only.** `kb-query kb/<file>.md` resolves a link
   from that file into another one. It does not compute a link into it from outside, so a claim
-  superseded from another file whose back-link is missing is served there as current. Query without the
-  path, or with `--topic`, to see it retired.
+  superseded from another file whose back-link is missing is served there as current. Without the path,
+  or with `--topic`, that claim is held back instead: the missing back-link is a finding, so it shows as
+  `QUARANTINED:L7` under `--include-quarantined`. Once `kb-lint fix` writes the back-link, it reads
+  `SUPERSEDED-BY:` under `--history`.
 
 ## Upgrading from 0.1.6
 
@@ -158,12 +171,15 @@ that passes `--no-log` now exits 2, and the `kb/_serve/` directory can be delete
   orphans. The guard every adopter has is the check `kb_capture` runs before it appends. An instance
   MAY carry its own machine-local hook (one that reads the interpreter and the tools' directory from
   its local git config); where one runs, a refusal at commit time is the gate working, and the hook
-  is never bypassed with `--no-verify`. **A hook can widen a commit.** The fix writes into any file a
-  staged link points into, and a hook that stages the files the fix names stages each one whole.
-  `kb-lint fix --changed --hook` judges the commit from the index and writes only files whose working
-  tree equals their staged copy. If a file it must write has unstaged changes, it writes nothing there
-  and fails, naming the file; stage or stash that file, then commit again. A hook that stages more than
-  the fix names (`git add -u`, say) can also sweep another session's uncommitted edits into the commit.
+  is never bypassed with `--no-verify`. **A hook must stop when `kb-lint fix --changed --hook` exits
+  non-zero** (test its exit code, or run the hook under `set -e`). That fix judges the commit from the
+  index and writes only files whose working tree equals their staged copy. If a file it must write has
+  unstaged changes, it writes nothing there, exits 1 and names the file; stage or stash that file, then
+  commit again. As a backstop, `kb-lint check --changed --hook` refuses a commit that still carries any
+  fixable finding, because the fix could not land. **A hook can widen a commit.** The fix writes into
+  any file a staged link points into, and a hook that stages the files the fix names stages each one
+  whole. A hook that stages more than the fix names (`git add -u`, say) can also sweep another session's
+  uncommitted edits into the commit.
 - **No POSIX support**, and no cross-platform CI.
 
 MIT licensed — see `LICENSE`.

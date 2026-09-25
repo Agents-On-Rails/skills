@@ -65,9 +65,11 @@ checks: # G = gating, F = fixable; semantics in `okf-e-profile.md` §4 and §6
                           #    FAIL-CLOSED: never default/coerce a missing method
   L6: value-validity      # G  enums, ISO dates not-future, until: > v:-date, seen: >= 1
   L7: link-integrity      # F/G reciprocal links and the status a back-link entails fixable; a
-                          #    target that exists nowhere, is deprecated (even in a complete pair),
-                          #    or has another superseder (back-linked or not) gates on each linking
-                          #    claim, as does a deprecated claim carrying superseded-by:. Targets
-                          #    resolve corpus-wide; errors are reported for the files named or
-                          #    staged, a fixable finding about a linked claim under its own file.
+                          #    target that exists nowhere or is deprecated (even in a complete pair)
+                          #    gates on the linking claim, as does a deprecated claim carrying
+                          #    superseded-by:. A target with another superseder gates on the linking
+                          #    claim it does not link back to, or, with no back-link at all, on every
+                          #    linking claim. Targets resolve corpus-wide; errors are reported for the
+                          #    files named or staged, a fixable finding about a linked claim under its
+                          #    own file; under --changed --hook a fixable finding gates.
   L8: id-unique           # F/G beads-style c-XXXX; missing id assignable; collision gates
