@@ -598,6 +598,28 @@ def chain_head(claim, by_id):
     return node
 
 
+# Round 4, W6 (the round-3 check's V19, and L4's "related"): what an id collision's L8 line advises. It said "run
+# `kb-lint fix` to assign fresh ids", but a fix assigns ids only to id-less claims, so following it changed nothing in
+# any context -- and in hook context it named the plain command, which has no working-tree rule and can sweep another
+# session's draft into the commit. hook_hints() swaps in the hook-context form.
+DUP_ID_HINT = ("ids must be corpus-unique, and a fix never changes an id that is already set: remove the `id:` from "
+               "the claim that should get a new one, then run `kb-lint fix` to mint a fresh one (a link naming that "
+               "id will then mean the claim that kept it)")
+DUP_ID_HINT_HOOK = ("ids must be corpus-unique, and a fix never changes an id that is already set: remove the `id:` "
+                    "from the claim that should get a new one and stage that file, then run `kb-lint fix --changed "
+                    "--hook` to mint a fresh one and stage exactly what it names (a link naming that id will then "
+                    "mean the claim that kept it)")
+
+
+def hook_hints(errs):
+    """In hook context, the findings' remedies name the hook-mode fix (round 4, W6): an id collision's L8 line takes
+    DUP_ID_HINT_HOOK. The fixable findings' own hint is rewritten by gate_unfixed when the check turns them gating."""
+    for e in errs:
+        if DUP_ID_HINT in e.msg:
+            e.msg = e.msg.replace(DUP_ID_HINT, DUP_ID_HINT_HOOK)
+    return errs
+
+
 def corpus_checks(all_claims, errs, cfg, pool=None):
     """L7 referential integrity + L8 id uniqueness, corpus-wide.
 
@@ -644,13 +666,10 @@ def corpus_checks(all_claims, errs, cfg, pool=None):
             # both makes an ambiguous id serve NOTHING rather than something arbitrary.
             if kid not in flagged:
                 errs.append(Err(o.file, o.line, "L8", "G",
-                                f"id '{kid}' is also used at {c.file}:{c.line} -- ids "
-                                "must be corpus-unique; run `kb-lint fix` to assign "
-                                "fresh ids"))
+                                f"id '{kid}' is also used at {c.file}:{c.line} -- " + DUP_ID_HINT))
                 flagged.add(kid)
             errs.append(Err(c.file, c.line, "L8", "G",
-                            f"id '{kid}' already used at {o.file}:{o.line} -- ids must "
-                            "be corpus-unique; run `kb-lint fix` to assign fresh ids"))
+                            f"id '{kid}' already used at {o.file}:{o.line} -- " + DUP_ID_HINT))
         else:
             by_id[kid] = c
     for p in pool or ():
@@ -661,8 +680,7 @@ def corpus_checks(all_claims, errs, cfg, pool=None):
             c = by_id[kid]
             if c in all_claims:   # a NAMED claim collides with one in a file not named
                 errs.append(Err(c.file, c.line, "L8", "G",
-                                f"id '{kid}' already used at {p.file}:{p.line} -- ids must "
-                                "be corpus-unique; run `kb-lint fix` to assign fresh ids"))
+                                f"id '{kid}' already used at {p.file}:{p.line} -- " + DUP_ID_HINT))
             continue              # first-wins among pool claims; their own check reports them
         by_id[kid] = p
 
@@ -1250,14 +1268,20 @@ def apply_fixes(cfg, files, do_format=False, quiet=False, view=None, announce=Fa
         print(f"kb-lint: REFUSED -- the fix must write {rel}, but its working-tree copy differs from "
               "its staged copy (or it has no staged copy), so nothing was written to it. Stage or "
               "stash its changes, then commit again.", file=sys.stderr)
+    # in hook context every remedy this run prints names the hook-mode fix (round 4, W6 = the round-3 check's L4):
+    # the plain `kb-lint fix` has no working-tree rule, so it can write into a file holding another session's draft
+    hook = isinstance(view, IndexView)
+    again = "`kb-lint fix --changed --hook`" if hook else "`kb-lint fix`"
     introduced = _introduced(cfg, run, files, view)
     for rel, found in introduced:
         print(f"kb-lint: this fix run introduced a gating error into {rel}, a file it followed a "
-              "link into -- the run fails; fix what is named, then run `kb-lint fix` again:",
+              f"link into -- the run fails; fix what is named, then run {again} again:",
               file=sys.stderr)
-        for e in found:
+        for e in (hook_hints(found) if hook else found):
             print(f"  {rel}:{e.line}  {e.check}  {e.msg}", file=sys.stderr)
     errs, claims, nfiles = run_checks(cfg, files, overrides=ov, resolve=pool)
+    if hook:
+        hook_hints(errs)
     if not quiet:
         print("fix: done; re-check follows")
     rc = report(errs, claims, nfiles, quiet=quiet)
@@ -1635,6 +1659,7 @@ def main():
         errs, claims, nfiles = run_checks(cfg, files, overrides=view.overrides_for(files),
                                           resolve=view.pool_for(files))
         if isinstance(view, IndexView):
+            hook_hints(errs)
             gate_unfixed(errs)
         return report(errs, claims, nfiles, quiet=args.quiet)
     if args.cmd == "fix":
