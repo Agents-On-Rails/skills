@@ -103,22 +103,24 @@ in plain language — the operator sees only "this folder" + "work KB / personal
    - **Exit 1 with `WROTE … then the fix pass failed on <file>`** = the claim **is** on disk, but the named file does not lint. Report it and fix what is named before you commit; never commit a file the fix pass failed on.
    - **Exit 2** = a routing/boundary/workspace HALT, or an input refused before anything was written. The input cases: an empty or whitespace-only `--text`; a double quote in a brace value (rephrase with single quotes); a line that would not read back exactly as given, which means a `--text` ending in a `{...}` block with no field given, or a field value holding `{` without any of `,` `}` `:` (rephrase it); a control or line-break character, or text that cannot be written as UTF-8; or a `--topic` that is not a plain file name (an empty name, one of only dots, or a name holding a `~` followed by a digit, counts as not plain) or names a reserved file such as `index.md`, in any letter case. Report it, or handle a `CONFIRM: -> personal` HALT by asking "yes, personal" then re-running with `--confirm-personal`.
 
-   **No pre-commit hook ships with this preview** (see README); the boundary and lint checks already ran before the write. An instance may carry its own machine-local hook. Where one runs, a refusal at commit is the gate working (fix what it names and commit again), and it is never bypassed. **Such a hook can widen the commit:** its fix pass can write into a linked topic file and stage that file whole. It refuses to write a file that has unstaged changes, names it and exits non-zero; the hook must stop on that exit. Stage or stash that file, then commit again. Its check also refuses a commit that still carries any fixable finding.
+   **No pre-commit hook ships with this preview** (see README); the boundary and lint checks already ran before the write. An instance may carry its own machine-local hook. Where one runs, a refusal at commit is the gate working (fix what it names and commit again), and it is never bypassed. **Such a hook can widen the commit:** its fix pass can write into a linked topic file and stage that file whole. It refuses to write a file that has unstaged changes, names it and exits non-zero; the hook must stop on that exit. Stage or stash that file, then commit again. Its check also refuses a commit that still carries any fixable finding. Under `git commit -- <paths>` (or `-o`) such a hook refuses the commit whenever its own fix wrote anything, since git would commit the write but leave your index without it; it names the files, so stage them, then commit again with them among the paths.
    **Pushing is operator-gated (Tier-2)**: do not push unless the operator says so.
 
 ## Reconfirm — you re-derived a claim the KB already holds
 
-Never capture a second claim for something the KB holds: bump the one that exists. Find its id, preview, confirm as in step 4 (the same `--confirm-personal` rule applies), then run it without `--dry-run`:
+Never capture a second claim for something the KB holds: bump the one that exists. Find its id, preview it, confirm as in step 4 (the same `--confirm-personal` rule applies), then run it without `--dry-run`. Do not pass `--quiet`: it hides the fix's `wrote:` lines, which the commit below reads.
 ```
 <PY> <CAP> reconfirm <id> --instance <instance> --dry-run [--v <how-known>] [--src "<origin>"] [--conf <level>]
 ```
+If the preview FAILS, stop and report it: unlike `add`, reconfirm writes before it lints, so running it would rewrite the claim whatever the preview said.
+
 It edits the claim in place, in whichever topic file holds it, and prints `reconfirmed <id> (<kind>) in <file>`. Its fix can also write a linked topic file, printed after `wrote:`. A lesson takes no `--v`; a decision is refused.
 - **Exit 0** = written and linted clean. Commit it the way step 5 does. The file it edited is staged whole and may hold another session's uncommitted claim, so first check it with `git -C <repo-root> diff HEAD -- <file>` and `git -C <repo-root> status --porcelain -- <file>`; if a change there is not yours, stop and ask the operator. Then commit exactly those files:
   ```
   git -C <repo-root> add <file> <every path printed after "wrote:"> && git -C <repo-root> commit -m "kb: reconfirm <id>" -- <file> <every path printed after "wrote:">
   ```
-- **Exit 1 with `REFUSED`** = nothing was written, as in step 5. **Exit 1 otherwise** = the claim was rewritten, then the fix after it failed on the file named above: fix that before you commit.
-- **Exit 2** = a HALT, or a refusal that names its reason (a decision, a weaker method than the recorded one, a same-day repeat without `--again`, a value refused as in step 5). Nothing was written.
+- **Exit 1 with reconfirm's own line, `REFUSED -- NOTHING was written to <file>`** = nothing was written: a file its fix would change has uncommitted changes, as in step 5. **Any other exit 1** means the claim was rewritten and the fix after it failed on the file named; that includes a `kb-lint: REFUSED …` line, which the fix prints after the claim was rewritten. Fix what is named before you commit.
+- **Exit 2** = nothing was written: a HALT, or a refusal that names its reason. The refusals: an id that no claim in this instance has; a decision; `--v` on a lesson; a weaker method than the recorded one; `ran-tool` or `read-primary-source` without `--verified-in-session`; a recorded stamp with no date, or one in the future; a same-day repeat without `--again`; a value refused as in step 5; or an edited brace that would not read back as given.
 
 ## HELP
 

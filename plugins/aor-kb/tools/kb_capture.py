@@ -992,10 +992,12 @@ def cmd_reconfirm(args, manifest):
             print("[dry-run] the write would be REFUSED, writing nothing: " + swept_account(swept))
             return 1
         if not args.quiet:
+            # Round 5 (X3 = the round-4 check's K4-5): this said "the write would be rejected the same way", which was
+            # false -- reconfirm writes before it lints, so the write lands and only then fails.
             print("[dry-run] candidate lints GREEN in the real corpus; nothing was written"
                   if rc == 0 else
-                  "[dry-run] candidate FAILS the real lint -- the write would be rejected "
-                  "the same way")
+                  "[dry-run] candidate FAILS the real lint -- stop here: reconfirm writes BEFORE it lints, so running "
+                  "it would rewrite the claim whatever this preview says. Fix what is named first.")
         return rc
     if swept:
         print(f"REFUSED -- NOTHING was written to {relfp}. " + swept_account(swept), file=sys.stderr)

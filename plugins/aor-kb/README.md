@@ -202,7 +202,12 @@ that passes `--no-log` now exits 2, and the `kb/_serve/` directory can be delete
   someone else's unstaged edits. **A hook can widen a commit.** The fix writes into
   any file a staged link points into, and a hook that stages the files the fix names stages each one
   whole. A hook that stages more than the fix names (`git add -u`, say) can also sweep another session's
-  uncommitted edits into the commit.
+  uncommitted edits into the commit. A hook that stages what the fix names must stage each path
+  literally, as `git --literal-pathspecs add -- <path>`, since otherwise a topic file named `notes[1].md`
+  is a glob that also stages `notes1.md`; and it must strip the carriage return that Python on Windows
+  ends each captured line with. It must also refuse a commit limited to paths (`git commit -- <paths>`,
+  or `-o`) whenever the fix wrote anything: git runs the hook on a temporary index, so it would commit
+  the write but leave the real index without it.
 - **No POSIX support**, and no cross-platform CI.
 
 MIT licensed — see `LICENSE`.
