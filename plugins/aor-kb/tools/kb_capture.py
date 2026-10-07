@@ -44,7 +44,7 @@ and then the post-append fix pass failed on a named file - 2 usage/routing/bound
 input refused before anything is written: an empty or whitespace-only --text, a control or line-break
 character, text that cannot be encoded as UTF-8, a double quote in a brace value, a line that would not
 parse back to the text and fields given, or a --topic that is not a safe file name (an 8.3 short-name
-shape and an empty name included) or names a reserved file in any letter case.
+shape, and a name that is empty or only dots, included) or names a reserved file in any letter case.
 """
 
 import argparse
@@ -286,11 +286,13 @@ def topic_path(root: Path, topic: str, reserved, kb_path):
                 "release-process. Nothing was written.")
     # W3 (the round-3 check's L2): the file needs a name. T10 skips a '.' segment, so `--topic ./` became './.md' and
     # wrote kb/.md -- A8's file no reader looks for -- and `--topic .md` or `sub/` reached it too. A stem of only
-    # whitespace counts as empty, as A8 reads a whitespace-only topic.
-    if not segs[-1][:-len(".md")].strip():
-        die(f"--topic '{topic}' names no file: once '.md' is removed its last segment is empty, so the claim "
-            f"would land in a file such as {kb_path}/.md, which no reader will look for (W3). Use a plain slug "
-            "such as release-process. Nothing was written.")
+    # whitespace counts as empty, as A8 reads a whitespace-only topic. Round 5, X6 (the round-4 check's K4-9, V4-13): a
+    # stem of only DOTS is no name either -- `--topic .` became '..md' and wrote kb/..md, as did `...`, `x/.` and `..md`.
+    stem = segs[-1][:-len(".md")]
+    if all(ch == "." or ch.isspace() for ch in stem):
+        die(f"--topic '{topic}' names no file: once '.md' is removed, its last segment is empty or holds only dots "
+            f"and whitespace, so the claim would land in a file such as {kb_path}/.md or {kb_path}/..md, which no "
+            "reader will look for (W3, X6). Use a plain slug such as release-process. Nothing was written.")
     # A1: a reserved file is GENERATED, not authored. check_file returns class
     # 'reserved' and parses NO claims from one, so a claim appended here is never
     # id-assigned, never graded, and refresh_index rebuilds the file from the concept

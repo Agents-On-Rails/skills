@@ -156,8 +156,8 @@ Run `kb-lint fix kb/` once after upgrading. What changes:
   half of a surrogate pair. `--topic` must be a plain file name: no path segment may hold
   `< > : " | ? *`, end in a dot or a space, be a device name such as `nul`, or hold a `~` followed by a
   digit (the shape of a Windows 8.3 short name, which can resolve to another, longer-named file); the
-  file name may not be empty (`./`, `.md`); and it may not name a reserved file (`index.md`, `log.md`)
-  in any letter case.
+  file name may not be empty or only dots (`./`, `.md`, `.`, `...`); and it may not name a reserved file
+  (`index.md`, `log.md`) in any letter case.
 - **A capture refuses when another file it would change has uncommitted changes**, staged or not. Such a
   file is one the fix after the write would write a back-link into: the file holding the claim that
   `--supersedes` or `--superseded-by` names, or one that a link from a claim already in the topic file
