@@ -38,7 +38,8 @@ operator affirming the act happened this session). Upgrades otherwise need a lat
 v-event. Exit codes: 0 ok (3 = a required dependency is not installed) - 1 in one of two cases the
 output names: REFUSED before the append, nothing written (the lint gates; or a file other than the topic
 file that the write or its fix would change has uncommitted changes, or git cannot report its state --
-also a --dry-run that would be refused, and `reconfirm` the same way), or WROTE
+also a --dry-run that would be refused, and `reconfirm` the same way; or a topic file the index lists has
+a name that cannot be written as UTF-8, so the index refresh would fail after the write), or WROTE
 and then the post-append fix pass failed on a named file - 2 usage/routing/boundary HALT, including an
 input refused before anything is written: an empty or whitespace-only --text, a control or line-break
 character, text that cannot be encoded as UTF-8, a double quote in a brace value, a line that would not
@@ -569,6 +570,9 @@ def cmd_add(args, manifest):
     errs, claims, nfiles, cand = preview_lint(cfg, fp, line)
     rel = fp.relative_to(root).as_posix()
     swept = swept_files(cfg, fp, claims)
+    # W4 (the round-3 check's V13): the index this capture rebuilds must be writable BEFORE the claim is. A topic file
+    # whose name cannot be written as UTF-8 made refresh_index raise after the append: a traceback, the claim on disk.
+    unnamed = kb_lint.unencodable_index_names(cfg)
     if args.dry_run:
         created = "new file" if not fp.is_file() else "append"
         print(f"[dry-run] {args.instance} -> {fp} ({created})")
@@ -576,6 +580,9 @@ def cmd_add(args, manifest):
         rc = kb_lint.report(errs, claims, nfiles, quiet=args.quiet)
         if rc == 0 and swept:
             print("[dry-run] the write would be REFUSED, writing nothing: " + swept_account(swept))
+            return 1
+        if rc == 0 and unnamed:
+            print("[dry-run] the write would be REFUSED, writing nothing: " + unnamed_account(unnamed))
             return 1
         if not args.quiet:
             print("[dry-run] candidate lints GREEN in the real corpus (id assigned at write)"
@@ -593,6 +600,9 @@ def cmd_add(args, manifest):
         return 1
     if swept:
         print(f"REFUSED -- NOTHING was written to {rel}. " + swept_account(swept), file=sys.stderr)
+        return 1
+    if unnamed:
+        print(f"REFUSED -- NOTHING was written to {rel}. " + unnamed_account(unnamed), file=sys.stderr)
         return 1
 
     created = append_claim(fp, line, cfg["profile"])
@@ -688,6 +698,12 @@ def swept_account(swept):
     return (f"The fix after this write would also write into {files}. Staging that whole would carry "
             "those changes into your commit (OR12). If they are this session's own earlier captures or "
             "reconfirms, commit them first, then continue; if they are not, stop and ask the operator.")
+
+
+def unnamed_account(unnamed):
+    return (f"Every capture rebuilds the index, which would list {'; '.join(unnamed)} -- a topic file whose name "
+            "cannot be written as UTF-8 (half of a surrogate pair, which an earlier version's --topic could create). "
+            "The index write would fail after the claim was written (W4). Rename that file, then capture again.")
 
 
 def gating_account(gating, claims, relf, cand_ln, rel):

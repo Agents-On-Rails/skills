@@ -96,6 +96,7 @@ in plain language — the operator sees only "this folder" + "work KB / personal
      - the new claim itself: a target that exists nowhere, a `deprecated` target, or a target another claim already supersedes;
      - a claim already in that topic file, which must be fixed before anything can be appended there;
      - or another topic file that the write or its fix would change and that has uncommitted changes: the file holding a claim you supersede or are superseded by, or one that a link from a claim already in your topic file points into. If those changes are your own captures or reconfirms from earlier in this session, commit them first, then continue; otherwise ask the operator.
+     - or a topic file whose name cannot be written as UTF-8 (an earlier version could create one): the index refresh after the write would fail. Report it; the operator renames that file.
 
      There is nothing to commit.
    - **Exit 1 with `WROTE … then the fix pass failed on <file>`** = the claim **is** on disk, but the named file does not lint. Report it and fix what is named before you commit; never commit a file the fix pass failed on.

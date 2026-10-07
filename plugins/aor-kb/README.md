@@ -166,6 +166,9 @@ Run `kb-lint fix kb/` once after upgrading. What changes:
   they are your own earlier captures or reconfirms, commit them first, then continue. (The topic file
   the capture appends to is not checked, nor is the generated `kb/index.md`; see the capture page's
   step 5.)
+- **A capture refuses while a topic file's name cannot be written as UTF-8** (half of a surrogate pair,
+  which an earlier version's `--topic` could create). The index refresh after the write would fail on it,
+  so the capture writes nothing and names the file; rename it.
 - **A machine-local hook's check now gates a fixable finding.** Under `kb-lint check --changed --hook`,
   a missing back-link, a missing id or a stale status that is still there at commit time refuses the
   commit, whether the hook's fix could not write it or no fix ran (see "Not in this preview").

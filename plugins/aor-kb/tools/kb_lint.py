@@ -1515,6 +1515,36 @@ def is_claim_line(line):
     return line.startswith("- ") and bool(KIND_RE.match(line[2:]))
 
 
+def index_topic_files(cfg):
+    """[(path, relpath under kb_path)] for every topic file kb/index.md lists -- the ONE definition of that set,
+    which refresh_index renders and kb_capture checks before a write (W4). Reserved files (cfg['reserved'], by
+    BASENAME, so a nested foo/index.md is reserved too, per check_file) and any '_'-prefixed path segment are
+    excluded."""
+    kb_root = cfg["dir"] / cfg["kb_path"]
+    reserved = set(cfg["reserved"])
+    out = []
+    for f in sorted(kb_root.rglob("*.md")):
+        rel = f.relative_to(kb_root).as_posix()
+        if f.name in reserved or any(p.startswith("_") for p in rel.split("/")):
+            continue
+        out.append((f, rel))
+    return out
+
+
+def unencodable_index_names(cfg):
+    """The relpaths (from the instance root, with the bad character written as an escape) of topic files the index
+    would list whose NAME cannot be written as UTF-8 -- half of a surrogate pair, which an earlier --topic could
+    create. refresh_index would meet it after a capture had already written its claim (round 4, W4 = the round-3
+    check's V13), so kb_capture asks first and writes nothing."""
+    bad = []
+    for _f, rel in index_topic_files(cfg):
+        try:
+            rel.encode("utf-8")
+        except UnicodeEncodeError:
+            bad.append(f"{cfg['kb_path']}/{rel}".encode("utf-8", "backslashreplace").decode("utf-8"))
+    return bad
+
+
 def refresh_index(cfg):
     """Regenerate kb/index.md (the infuse artifact, spec §9) so the concept list stays current
     after a capture. Preserves the existing okf_version frontmatter; one line per concept file
@@ -1539,12 +1569,8 @@ def refresh_index(cfg):
                 # after saying so, so a malformed fence is a visible fix-me, not silent data loss.
                 print(f"kb-lint: WARNING {index} has an unclosed frontmatter fence; keeping the "
                       "default okf_version -- fix the closing '---'", file=sys.stderr)
-    reserved = set(cfg["reserved"])
     concepts = []
-    for f in sorted(kb_root.rglob("*.md")):
-        rel = f.relative_to(kb_root).as_posix()
-        if f.name in reserved or any(p.startswith("_") for p in rel.split("/")):
-            continue
+    for f, rel in index_topic_files(cfg):
         n = sum(1 for ln in f.read_text(encoding="utf-8").splitlines() if is_claim_line(ln))
         concepts.append((rel[:-3], n))
     body = ("\n".join(f"- {slug} ({n} claim{'' if n == 1 else 's'})" for slug, n in concepts)
