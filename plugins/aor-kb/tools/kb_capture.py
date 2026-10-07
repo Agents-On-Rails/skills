@@ -703,16 +703,22 @@ def swept_account(swept):
             "reconfirms, commit them first, then continue; if they are not, stop and ask the operator.")
 
 
+# A LONE surrogate, as a .NET pattern: a high half not followed by a low one, or a low half not preceded by a high one.
+# .NET matches UTF-16 code units, so a class of all surrogates also matched both halves of a VALID pair -- an emoji
+# name -- and renamed it (round 6, Z2 = the round-5 check's K5-2, V5-19).
+LONE_SURROGATE_NET = r"[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]"
+
+
 def unnamed_account(unnamed, kb_path):
     # The route (round 5, X8 = the round-4 check's K4-10, cost 2): the name cannot be typed, so the rename must come
     # from a tool that LISTS the folder. Measured on Windows 11 with PowerShell 7: one run renames such a file and
-    # such a directory.
+    # such a directory, and leaves an emoji-named file alone (capture-selftest Z2-1 runs it).
     return (f"Every capture rebuilds the index, which would list {'; '.join(unnamed)} -- a topic file whose name "
             "cannot be written as UTF-8 (half of a surrogate pair, which an earlier version's --topic could create). "
             "The index write would fail after the claim was written (W4). The name cannot be typed, so rename it "
             "with a tool that lists the folder, for example from the repository root in PowerShell: "
-            f"Get-ChildItem -LiteralPath {kb_path} -Recurse | Where-Object Name -match '[\\uD800-\\uDFFF]' | "
-            "Rename-Item -NewName { $_.Name -replace '[\\uD800-\\uDFFF]', '_' } -- then capture again.")
+            f"Get-ChildItem -LiteralPath {kb_path} -Recurse | Where-Object Name -match '{LONE_SURROGATE_NET}' | "
+            f"Rename-Item -NewName {{ $_.Name -replace '{LONE_SURROGATE_NET}', '_' }} -- then capture again.")
 
 
 def gating_account(gating, claims, relf, cand_ln, rel):
@@ -984,9 +990,10 @@ def cmd_reconfirm(args, manifest):
         print(f"  after   {after_brace}")
         # Lint the candidate IN MEMORY against the real corpus, the way add's dry-run does: a
         # preview that reports a different verdict from the write is worse than no preview.
-        files = kb_lint.collect_files(cfg, [])
-        errs, claims, nfiles = kb_lint.run_checks(
-            cfg, files, overrides={fp: "\n".join(candidate)})
+        # Round 6, Z1 (the round-5 check's K5-1, V5-18): gated on the reconfirmed file only, with the rest of the
+        # corpus as the resolution pool -- what the write's fix checks (R3). It linted every file, so a gating error
+        # in an unrelated one failed the preview while the write landed at exit 0.
+        errs, claims, nfiles = kb_lint.run_checks(cfg, [fp], overrides={fp: "\n".join(candidate)})
         rc = kb_lint.report(errs, claims, nfiles, quiet=args.quiet)
         if rc == 0 and swept:
             print("[dry-run] the write would be REFUSED, writing nothing: " + swept_account(swept))
