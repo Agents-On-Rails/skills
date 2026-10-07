@@ -88,10 +88,11 @@ in plain language — the operator sees only "this folder" + "work KB / personal
    Show the exact claim line + the resolved **repo path** it will land in. Ask the user to confirm by **naming the instance** ("yes, work" / "yes, personal") — not a bare "ok".
    - **Folded personal confirm (SEC-002):** if `--instance personal` from a **`both`** or unattested folder, that same "yes, personal" IS the safety confirm — phrase it *"…and this folder feeds both KBs, so confirming: this note is personal, not work? It syncs to personal GitHub."* Only on a "yes, personal" do you add `--confirm-personal` at step 5.
 5. **Write, and commit in the same step** (drop `--dry-run`, and do not pass `--quiet`: it hides the fix's `wrote:` lines, which this step reads; add `--confirm-personal` only per the folded confirm above). Read the exit code, then:
-   - **Exit 0** = written and linted clean. Commit at once in the instance repo, staging `kb/index.md` and **every path the write printed after `wrote`**: the topic file, plus any other topic file the fix wrote into because the other end of a link lives there. Both halves of a link go into one commit; a half-linked commit is served as quarantined. Each file is staged whole, so first look at `git -C <repo-root> diff HEAD -- <file>` for each; it shows every change since the last commit, staged or not. The topic file you appended to may also hold another session's uncommitted claim, and that would ride into this commit. If it does, stop and ask the operator.
+   - **Exit 0** = written and linted clean. Commit at once in the instance repo, staging `kb/index.md` and **every path the write printed after `wrote`**: the topic file, plus any other topic file the fix wrote into because the other end of a link lives there. Both halves of a link go into one commit; a half-linked commit is served as quarantined. Each file is staged whole, so first check each one with `git -C <repo-root> diff HEAD -- <file>`, which shows every change since the last commit, staged or not, and with `git -C <repo-root> status --porcelain -- <file>`, which also shows a file git does not track yet (`??`); `git diff HEAD` prints nothing for that. The topic file you appended to may also hold another session's uncommitted claim, and that would ride into this commit: a change you did not make, or `??` on a file the write did not print as `new` (someone created it and has not committed it), means stop and ask the operator.
      ```
-     git -C <repo-root> add kb/index.md <every path printed after "wrote"> && git -C <repo-root> commit -m "kb: capture <short note>"
+     git -C <repo-root> add kb/index.md <every path printed after "wrote"> && git -C <repo-root> commit -m "kb: capture <short note>" -- kb/index.md <every path printed after "wrote">
      ```
+     The `--` and the paths limit the commit to exactly these files. Another session may have staged a change anywhere in the repository, and `git commit -m` alone would commit that too.
    - **Exit 1 with `REFUSED`** = **nothing was written**. The REFUSED line names what stops the write:
      - the new claim itself: a target that exists nowhere, a `deprecated` target, or a target another claim already supersedes;
      - a claim already in that topic file, which must be fixed before anything can be appended there;
@@ -104,6 +105,20 @@ in plain language — the operator sees only "this folder" + "work KB / personal
 
    **No pre-commit hook ships with this preview** (see README); the boundary and lint checks already ran before the write. An instance may carry its own machine-local hook. Where one runs, a refusal at commit is the gate working (fix what it names and commit again), and it is never bypassed. **Such a hook can widen the commit:** its fix pass can write into a linked topic file and stage that file whole. It refuses to write a file that has unstaged changes, names it and exits non-zero; the hook must stop on that exit. Stage or stash that file, then commit again. Its check also refuses a commit that still carries any fixable finding.
    **Pushing is operator-gated (Tier-2)**: do not push unless the operator says so.
+
+## Reconfirm — you re-derived a claim the KB already holds
+
+Never capture a second claim for something the KB holds: bump the one that exists. Find its id, preview, confirm as in step 4 (the same `--confirm-personal` rule applies), then run it without `--dry-run`:
+```
+<PY> <CAP> reconfirm <id> --instance <instance> --dry-run [--v <how-known>] [--src "<origin>"] [--conf <level>]
+```
+It edits the claim in place, in whichever topic file holds it, and prints `reconfirmed <id> (<kind>) in <file>`. Its fix can also write a linked topic file, printed after `wrote:`. A lesson takes no `--v`; a decision is refused.
+- **Exit 0** = written and linted clean. Commit it the way step 5 does. The file it edited is staged whole and may hold another session's uncommitted claim, so first check it with `git -C <repo-root> diff HEAD -- <file>` and `git -C <repo-root> status --porcelain -- <file>`; if a change there is not yours, stop and ask the operator. Then commit exactly those files:
+  ```
+  git -C <repo-root> add <file> <every path printed after "wrote:"> && git -C <repo-root> commit -m "kb: reconfirm <id>" -- <file> <every path printed after "wrote:">
+  ```
+- **Exit 1 with `REFUSED`** = nothing was written, as in step 5. **Exit 1 otherwise** = the claim was rewritten, then the fix after it failed on the file named above: fix that before you commit.
+- **Exit 2** = a HALT, or a refusal that names its reason (a decision, a weaker method than the recorded one, a same-day repeat without `--again`, a value refused as in step 5). Nothing was written.
 
 ## HELP
 

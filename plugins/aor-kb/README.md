@@ -192,7 +192,8 @@ that passes `--no-log` now exits 2, and the `kb/_serve/` directory can be delete
   MAY carry its own machine-local hook (one that reads the interpreter and the tools' directory from
   its local git config); where one runs, a refusal at commit time is the gate working, and the hook
   is never bypassed with `--no-verify`. **A hook must stop when `kb-lint fix --changed --hook` exits
-  non-zero** (test its exit code, or run the hook under `set -e`). That fix judges the commit from the
+  non-zero**: read that command's own exit status, never through a pipe, whose status is the last
+  command's (`fix … | tee` reports the `tee`). That fix judges the commit from the
   index and writes only files whose working tree equals their staged copy. If a file it must write has
   unstaged changes, it writes nothing there, exits 1 and names the file; stage or stash that file, then
   commit again. As a backstop, `kb-lint check --changed --hook` refuses a commit that still carries any

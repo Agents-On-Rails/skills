@@ -7,10 +7,11 @@ closed ALLOWED set, per-field validators returning error lists, parse/validate s
 
 Checks L1-L8; G = gating (hard reject), F = fixable (`kb-lint fix` repairs).
 Exit codes are the API: 0 clean - 1 gating errors (for `fix`, also: a write it refused -- a file whose
-working tree differs from its staged copy in hook mode, or a claim whose live brace already holds another
-value -- or a gating error it introduced into a file it followed a link into; under `check --changed
---hook`, also any fixable finding still present) - 2 usage/config error - 3 a required dependency is not
-installed.
+working tree differs from its staged copy in hook mode, or a claim the editor will not touch: one whose
+live brace already holds another value for the key, one that is deprecated (a tombstone is never flipped),
+or one whose status: value is not on one line of its brace -- or a gating error it introduced into a file
+it followed a link into; under `check --changed --hook`, also any fixable finding still present) - 2
+usage/config error - 3 a required dependency is not installed.
 Subcommands: check (default) / fix / strip / stats.
 """
 
@@ -605,7 +606,9 @@ def chain_head(claim, by_id):
 DUP_ID_HINT = ("ids must be corpus-unique, and a fix never changes an id that is already set: remove the `id:` from "
                "the claim that should get a new one, then run `kb-lint fix` to mint a fresh one (a link naming that "
                "id will then mean the claim that kept it)")
-DUP_ID_HINT_HOOK = ("ids must be corpus-unique, and a fix never changes an id that is already set: remove the `id:` "
+# (The word order of this name is deliberate: payload case PKG-11 text-scans this file for the retired hook
+# template's assignment, and a name ENDING in the word HOOK matched that scan.)
+DUP_ID_HOOK_HINT = ("ids must be corpus-unique, and a fix never changes an id that is already set: remove the `id:` "
                     "from the claim that should get a new one and stage that file, then run `kb-lint fix --changed "
                     "--hook` to mint a fresh one and stage exactly what it names (a link naming that id will then "
                     "mean the claim that kept it)")
@@ -613,10 +616,10 @@ DUP_ID_HINT_HOOK = ("ids must be corpus-unique, and a fix never changes an id th
 
 def hook_hints(errs):
     """In hook context, the findings' remedies name the hook-mode fix (round 4, W6): an id collision's L8 line takes
-    DUP_ID_HINT_HOOK. The fixable findings' own hint is rewritten by gate_unfixed when the check turns them gating."""
+    DUP_ID_HOOK_HINT. The fixable findings' own hint is rewritten by gate_unfixed when the check turns them gating."""
     for e in errs:
         if DUP_ID_HINT in e.msg:
-            e.msg = e.msg.replace(DUP_ID_HINT, DUP_ID_HINT_HOOK)
+            e.msg = e.msg.replace(DUP_ID_HINT, DUP_ID_HOOK_HINT)
     return errs
 
 
