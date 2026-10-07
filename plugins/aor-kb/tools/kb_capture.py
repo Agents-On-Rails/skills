@@ -40,9 +40,10 @@ output names: REFUSED before the append, nothing written (the lint gates; or a f
 file that the write or its fix would change has uncommitted changes, or git cannot report its state --
 also a --dry-run that would be refused, and `reconfirm` the same way), or WROTE
 and then the post-append fix pass failed on a named file - 2 usage/routing/boundary HALT, including an
-input refused before anything is written: a control or line-break character, text that cannot be
-encoded as UTF-8, a double quote in a brace value, a line that would not parse back to the text and
-fields given, or a --topic that is not a safe file name or names a reserved file in any letter case.
+input refused before anything is written: an empty or whitespace-only --text, a control or line-break
+character, text that cannot be encoded as UTF-8, a double quote in a brace value, a line that would not
+parse back to the text and fields given, or a --topic that is not a safe file name (an 8.3 short-name
+shape and an empty name included) or names a reserved file in any letter case.
 """
 
 import argparse
@@ -193,6 +194,10 @@ def grade_floor_ok(kind, v_value, verified_in_session):
 
 UNSAFE_NAME_CHARS = frozenset('<>:"|?*')
 DEVICE_NAME = re.compile(r"(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?", re.IGNORECASE)
+# Round 4, W2 (the round-3 check's V15): the shape of a Windows 8.3 short name. NTFS generates such aliases, so
+# kb/LONG-T~1.md can BE kb/long-topic-name.md: the claim lands in that file while the capture prints the alias, and
+# `git add` of the printed path then fails.
+SHORT_NAME = re.compile(r"~\d")
 
 
 def _trimmed(values):
@@ -265,13 +270,26 @@ def topic_path(root: Path, topic: str, reserved, kb_path):
     # OR7 (2026-09-25): --topic must be a safe file name. A '"' crashed the write with an OSError
     # traceback at exit 1 (the re-review's R5), and ':' named an alternate data stream or a
     # drive-relative path. Refused at exit 2, before anything is written.
-    for seg in re.split(r"[\\/]", t):
+    segs = re.split(r"[\\/]", t)
+    for seg in segs:
         if seg == ".":
             continue   # './foo' names no directory of its own; it is not a name ending in a dot (T10)
         if set(seg) & UNSAFE_NAME_CHARS or seg != seg.rstrip(" .") or DEVICE_NAME.fullmatch(seg):
             die(f"--topic '{topic}' is not a safe file name: a path segment holds one of "
                 "< > : \" | ? *, ends in a dot or a space, or is a reserved device name (OR7). Use a "
                 "plain slug such as release-process. Nothing was written.")
+        if SHORT_NAME.search(seg):
+            die(f"--topic '{topic}' is not a safe file name: a path segment holds a '~' followed by a digit, "
+                "the shape of a Windows 8.3 short name, which can resolve to ANOTHER, longer-named file -- the "
+                "claim would land there while the capture printed this name (W2). Use a plain slug such as "
+                "release-process. Nothing was written.")
+    # W3 (the round-3 check's L2): the file needs a name. T10 skips a '.' segment, so `--topic ./` became './.md' and
+    # wrote kb/.md -- A8's file no reader looks for -- and `--topic .md` or `sub/` reached it too. A stem of only
+    # whitespace counts as empty, as A8 reads a whitespace-only topic.
+    if not segs[-1][:-len(".md")].strip():
+        die(f"--topic '{topic}' names no file: once '.md' is removed its last segment is empty, so the claim "
+            f"would land in a file such as {kb_path}/.md, which no reader will look for (W3). Use a plain slug "
+            "such as release-process. Nothing was written.")
     # A1: a reserved file is GENERATED, not authored. check_file returns class
     # 'reserved' and parses NO claims from one, so a claim appended here is never
     # id-assigned, never graded, and refresh_index rebuilds the file from the concept
@@ -515,6 +533,11 @@ def cmd_add(args, manifest):
     for _name, _val in (("--text", args.text), ("--topic", args.topic),
                         *((f"--{_k}", _v) for _k, _v in fields)):
         reject_unencodable(_name, _val)  # OR13-1: a lone surrogate, before anything is written
+    if not args.text.strip():
+        # W5 (the round-3 check's V20): `--text " "` wrote `- [fact]   {id: ...}`, a graded claim that states nothing --
+        # the round-trip guard compares trimmed text, and "" equals "".
+        die("--text: the claim text is empty or only whitespace -- a claim must state something. Nothing was "
+            "written.")
     brace = build_brace(fields)
     fp = topic_path(root, args.topic, cfg["reserved"], cfg["kb_path"])
     line = f"- [{args.kind}] {args.text}" + (f" {brace}" if brace else "")
