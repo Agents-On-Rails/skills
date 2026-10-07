@@ -612,12 +612,18 @@ DUP_ID_HOOK_HINT = ("ids must be corpus-unique, and a fix never changes an id th
                     "mean the claim that kept it)")
 
 
+HOOK_FIX = "`kb-lint fix --changed --hook`"
+
+
 def hook_hints(errs):
-    """In hook context, the findings' remedies name the hook-mode fix (round 4, W6): an id collision's L8 line takes
-    DUP_ID_HOOK_HINT. The fixable findings' own hint is rewritten by gate_unfixed when the check turns them gating."""
+    """In hook context, every finding's remedy names the hook-mode fix: an id collision's L8 line takes
+    DUP_ID_HOOK_HINT (round 4, W6), and every other `kb-lint fix` becomes `kb-lint fix --changed --hook` (round 5,
+    X4 = the round-4 check's K4-6). The plain fix has no working-tree rule, so it can write into a file that holds
+    another session's draft. Applied by `check --changed --hook` and by `fix --changed --hook` alike."""
     for e in errs:
         if DUP_ID_HINT in e.msg:
             e.msg = e.msg.replace(DUP_ID_HINT, DUP_ID_HOOK_HINT)
+        e.msg = e.msg.replace("`kb-lint fix`", HOOK_FIX)
     return errs
 
 
@@ -930,12 +936,12 @@ def gate_unfixed(errs):
     whose working tree equals their staged copy and names each file it writes. A plain `kb-lint fix`
     has no such rule: it would write into a file holding another session's unstaged draft, and
     staging what it names would sweep the draft in. The finding's own hint names that plain command
-    too, so it is rewritten to the hook-mode one on the same line. Nor does the line claim that a fix
+    too; hook_hints(), which runs first, rewrites it to the hook-mode one (round 5 moved that rewrite
+    there, so a hand-run `fix --changed --hook` gets it as well). Nor does the line claim that a fix
     ran -- under a hook that only checks, none did."""
     for e in errs:
         if e.cls == "F":
             e.cls = "G"
-            e.msg = e.msg.replace("`kb-lint fix`", "`kb-lint fix --changed --hook`")
             e.msg += (" -- still fixable at commit time, so the commit is refused (OR8; the width is "
                       "OR11). Run `kb-lint fix --changed --hook`: it writes only files whose working "
                       "tree equals their staged copy and names each one it writes. Stage exactly those "
@@ -1064,7 +1070,9 @@ def run_checks(cfg, files, overrides=None, resolve=None):
 FIX_NAMES = {"id": "missing id", "reciprocal": "missing reciprocal", "status": "stale status"}
 
 
-def report(errs, claims, nfiles, quiet=False):
+def report(errs, claims, nfiles, quiet=False, fix_cmd="kb-lint fix"):
+    """Print the findings and the summary; 1 if any finding gates. `fix_cmd` is the command the summary advises:
+    the hook-mode fix in hook context (round 5, X4)."""
     g = sum(1 for e in errs if e.cls == "G")
     fx = [e for e in errs if e.cls == "F"]
     if quiet:  # Q8: silent under --quiet so the hook's fix pass never double-prints
@@ -1082,7 +1090,7 @@ def report(errs, claims, nfiles, quiet=False):
             kinds = {}
             for e in fx:
                 kinds[e.fix[0]] = kinds.get(e.fix[0], 0) + 1
-            detail = " (run `kb-lint fix`: " + ", ".join(
+            detail = f" (run `{fix_cmd}`: " + ", ".join(
                 f"{n} {FIX_NAMES.get(k, 'missing ' + k)}" for k, n in sorted(kinds.items())) + ")"
         print(f"FAIL: {g} gating errors - {len(fx)} fixable{detail}")
     elif not quiet:
@@ -1272,7 +1280,7 @@ def apply_fixes(cfg, files, do_format=False, quiet=False, view=None, announce=Fa
     # in hook context every remedy this run prints names the hook-mode fix (round 4, W6 = the round-3 check's L4):
     # the plain `kb-lint fix` has no working-tree rule, so it can write into a file holding another session's draft
     hook = isinstance(view, IndexView)
-    again = "`kb-lint fix --changed --hook`" if hook else "`kb-lint fix`"
+    again = HOOK_FIX if hook else "`kb-lint fix`"
     introduced = _introduced(cfg, run, files, view)
     for rel, found in introduced:
         print(f"kb-lint: this fix run introduced a gating error into {rel}, a file it followed a "
@@ -1285,7 +1293,7 @@ def apply_fixes(cfg, files, do_format=False, quiet=False, view=None, announce=Fa
         hook_hints(errs)
     if not quiet:
         print("fix: done; re-check follows")
-    rc = report(errs, claims, nfiles, quiet=quiet)
+    rc = report(errs, claims, nfiles, quiet=quiet, fix_cmd=HOOK_FIX.strip("`") if hook else "kb-lint fix")
     if outcome is not None:
         gating = {e.file for e in errs if e.cls == "G"}
         outcome["failed"] = sorted(gating | run.blocked | set(run.refused)
@@ -1662,6 +1670,7 @@ def main():
         if isinstance(view, IndexView):
             hook_hints(errs)
             gate_unfixed(errs)
+            return report(errs, claims, nfiles, quiet=args.quiet, fix_cmd=HOOK_FIX.strip("`"))
         return report(errs, claims, nfiles, quiet=args.quiet)
     if args.cmd == "fix":
         return apply_fixes(cfg, files, do_format=args.format, quiet=args.quiet,
