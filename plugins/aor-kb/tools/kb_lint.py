@@ -606,8 +606,6 @@ def chain_head(claim, by_id):
 DUP_ID_HINT = ("ids must be corpus-unique, and a fix never changes an id that is already set: remove the `id:` from "
                "the claim that should get a new one, then run `kb-lint fix` to mint a fresh one (a link naming that "
                "id will then mean the claim that kept it)")
-# (The word order of this name is deliberate: payload case PKG-11 text-scans this file for the retired hook
-# template's assignment, and a name ENDING in the word HOOK matched that scan.)
 DUP_ID_HOOK_HINT = ("ids must be corpus-unique, and a fix never changes an id that is already set: remove the `id:` "
                     "from the claim that should get a new one and stage that file, then run `kb-lint fix --changed "
                     "--hook` to mint a fresh one and stage exactly what it names (a link naming that id will then "
