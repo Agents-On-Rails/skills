@@ -156,7 +156,7 @@ Run `kb-lint fix kb/` once after upgrading. What changes:
   half of a surrogate pair. `--topic` must be a plain file name: no path segment may hold
   `< > : " | ? *`, end in a dot or a space, be a device name such as `nul`, or hold a `~` followed by a
   digit (the shape of a Windows 8.3 short name, which can resolve to another, longer-named file); the
-  file name may not be empty or only dots (`./`, `.md`, `.`, `...`); and it may not name a reserved file
+  file name may not be empty or only dots and whitespace (`./`, `.md`, `.`, `...`); and it may not name a reserved file
   (`index.md`, `log.md`) in any letter case.
 - **A capture refuses when another file it would change has uncommitted changes**, staged or not. Such a
   file is one the fix after the write would write a back-link into: the file holding the claim that
@@ -207,7 +207,9 @@ that passes `--no-log` now exits 2, and the `kb/_serve/` directory can be delete
   is a glob that also stages `notes1.md`; and it must strip the carriage return that Python on Windows
   ends each captured line with. It must also refuse a commit limited to paths (`git commit -- <paths>`,
   or `-o`) whenever the fix wrote anything: git runs the hook on a temporary index, so it would commit
-  the write but leave the real index without it.
+  the write but leave the real index without it. A hook can tell by the name in `GIT_INDEX_FILE`: git
+  calls the repository's own index `index` (or `index.lock` under `-a` and `-i`), so treat any other name
+  as such a commit, which also covers an index the user set.
 - **No POSIX support**, and no cross-platform CI.
 
 MIT licensed — see `LICENSE`.
