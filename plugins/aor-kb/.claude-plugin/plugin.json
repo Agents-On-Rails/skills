@@ -1,6 +1,6 @@
 {
   "name": "aor-kb",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Preview 0.x: evidence-graded knowledge-base skills for agents. Skills: aor-kb-query, which searches a knowledge base and prints the matching claims, each stamped with a trust label that says how the claim is known (quarantined and retired claims are held back unless you ask for them); aor-kb-capture, which records what a session learned as a graded claim and routes it to a personal or a work knowledge base; and aor-kb-setup, which wires this machine to a knowledge base you have already cloned and never creates a repository, commits, pushes, or registers a workspace. Routing is fail-closed but it is not a boundary guarantee: it never reads the claim's content and cannot tell work knowledge from personal, it takes its signal from the working directory the command runs in, and its signal lists are empty until you fill them. Windows only; needs Python 3.9 or later on PATH as python, plus the pinned strictyaml in requirements.txt.",
   "author": {
     "name": "Agents On Rails",
