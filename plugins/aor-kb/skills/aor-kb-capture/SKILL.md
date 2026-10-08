@@ -92,7 +92,7 @@ in plain language — the operator sees only "this folder" + "work KB / personal
      ```
      git -C <repo-root> --literal-pathspecs add -- kb/index.md <every path printed after "wrote"> && git -C <repo-root> --literal-pathspecs commit -m "kb: capture <short note>" -- kb/index.md <every path printed after "wrote">
      ```
-     The `--` and the paths limit the commit to exactly these files. Another session may have staged a change anywhere in the repository, and `git commit -m` alone would commit that too. `--literal-pathspecs` makes each path name exactly one file: without it, a topic file named `notes[1].md` is a pattern that also matches `notes1.md`.
+     The `--` and the paths limit the commit to exactly these files. Another session may have staged a change anywhere in the repository, and `git commit -m` alone would commit that too. `--literal-pathspecs` makes each path name exactly one file: without it, a topic file named `notes[1].md` is a pattern that also matches `notes1.md`. Single-quote each path you substitute, in these commands and in the checks above (`'kb/notes[1].md'`): unquoted, Bash can expand the same pattern before git sees it.
    - **Exit 1 with `REFUSED`** = **nothing was written**. The REFUSED line names what stops the write:
      - the new claim itself: a target that exists nowhere, a `deprecated` target, or a target another claim already supersedes;
      - a claim already in that topic file, which must be fixed before anything can be appended there;
@@ -115,7 +115,7 @@ Never capture a second claim for something the KB holds: bump the one that exist
 If the preview FAILS, stop and report it: unlike `add`, reconfirm writes before it lints, so running it would rewrite the claim whatever the preview said.
 
 It edits the claim in place, in whichever topic file holds it, and prints `reconfirmed <id> (<kind>) in <file>`. Its fix can also write a linked topic file, printed after `wrote:`. A lesson takes no `--v`; a decision is refused.
-- **Exit 0** = written and linted clean. Commit it the way step 5 does. The file it edited is staged whole and may hold another session's uncommitted claim, so first check it with `git -C <repo-root> --literal-pathspecs diff HEAD -- <file>` and `git -C <repo-root> --literal-pathspecs status --porcelain -- <file>`; if a change there is not yours, stop and ask the operator. Then commit exactly those files:
+- **Exit 0** = written and linted clean. Commit it the way step 5 does. The file it edited is staged whole and may hold another session's uncommitted claim, so first check it with `git -C <repo-root> --literal-pathspecs diff HEAD -- <file>` and `git -C <repo-root> --literal-pathspecs status --porcelain -- <file>`; if a change there is not yours, stop and ask the operator. Then commit exactly those files, each path single-quoted as step 5 says:
   ```
   git -C <repo-root> --literal-pathspecs add -- <file> <every path printed after "wrote:"> && git -C <repo-root> --literal-pathspecs commit -m "kb: reconfirm <id>" -- <file> <every path printed after "wrote:">
   ```
