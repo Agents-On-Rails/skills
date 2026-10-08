@@ -25,7 +25,7 @@ never authority — only `- [kind] … {…}` list items are claims.
   ```
 
   Every tool that imports it checks at import time and exits **3** naming exactly what is
-  missing, rather than failing on an `ImportError` traceback. Exit 3 is distinct from 1
+  missing, rather than failing on an `ImportError` traceback. Exit 3 is distinct from
   1 (gating) and 2 (usage) so a caller can tell a missing dependency from a failing KB.
 
 ## First run
@@ -109,7 +109,18 @@ A claim in a file past its `evidence.review` date carries no flag and is still s
 
 ## Upgrading from 0.1.7
 
-Run `kb-lint fix kb/` once after upgrading. What changes:
+Run this once after upgrading, from the root of each knowledge-base clone, with nothing uncommitted under
+`kb/` (check with `git status --porcelain -- kb/`):
+
+```
+python -E -B <plugin-root>/tools/kb_lint.py fix kb/
+```
+
+Then review and commit every file it prints after `wrote:`. If your `.kb-lint.yml` sets another
+`kb_path`, name that directory instead of `kb/`. From here on, `kb-lint` and `kb-query` are short for
+`python -E -B <plugin-root>/tools/kb_lint.py` and `python -E -B <plugin-root>/tools/kb_query.py`.
+
+What changes:
 
 - **A supersede flips the older claim's status.** It now reads `status: superseded` whatever it
   carried before (a decision's `accepted`, a lifted lesson's `promoted`, which keeps its

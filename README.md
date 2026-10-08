@@ -15,7 +15,7 @@ The marketplace is named `aor`. Two plugins ship today, each as a `0.x` preview:
 | Plugin | Version | Skills | Needs |
 |---|---|---|---|
 | `aor-comm` | 0.1.4 | `aor-format-teams-message`: drafts a rich Microsoft Teams message and puts it on the clipboard ready to paste | Windows; Python 3.9 or later on PATH as `python` |
-| `aor-kb` | 0.1.7 | `aor-kb-query`: searches a knowledge base and returns only claims that clear a trust grade, each stamped with its label. `aor-kb-capture`: records what a session learned as a graded claim and routes it to a personal or a work base. Routing is fail-closed but **not a boundary guarantee** — it never reads the claim's content and cannot tell work knowledge from personal, it takes its signal from the working directory the command runs in, and its signal lists are empty until you fill them. `aor-kb-setup`: wires this machine to a knowledge base you have already cloned — dependency check, config root, manifest entry, repo scaffold — and never creates a repository, commits, pushes, or registers a workspace | Windows; Python 3.9 or later on PATH as `python`, plus the pinned `strictyaml` in the plugin's `requirements.txt` |
+| `aor-kb` | 0.1.7 | `aor-kb-query`: searches a knowledge base and prints the matching claims, each stamped with a trust label that says how the claim is known; quarantined and retired claims are held back unless you ask for them. `aor-kb-capture`: records what a session learned as a graded claim and routes it to a personal or a work base. Routing is fail-closed but **not a boundary guarantee** — it never reads the claim's content and cannot tell work knowledge from personal, it takes its signal from the working directory the command runs in, and its signal lists are empty until you fill them. `aor-kb-setup`: wires this machine to a knowledge base you have already cloned — dependency check, config root, manifest entry, repo scaffold — and never creates a repository, commits, pushes, or registers a workspace | Windows; Python 3.9 or later on PATH as `python`, plus the pinned `strictyaml` in the plugin's `requirements.txt` |
 
 ## Before you install
 
@@ -222,7 +222,7 @@ its tool beside its own `SKILL.md`, which is why it installs cleanly this way.
 - **Unpinned resolution is repository-wide, and that will surprise you.** `gh skill install --help`
   states the order as "latest tagged release in the repository, else default branch HEAD". Measured
   here, "tagged release" means a **GitHub Release**, not a git tag: plain tags are ignored and
-  prereleases do not count. This repository has twelve tags and exactly one Release,
+  prereleases do not count. This repository tags every plugin release but has exactly one Release,
   `v0.1.0-preview`, which is marked prerelease — so today an unpinned install resolves to the tip of
   `main`, not to any of those tags. **The first non-prerelease Release, for either plugin, would
   become the resolution target for every unpinned install of every skill here**, because the search
