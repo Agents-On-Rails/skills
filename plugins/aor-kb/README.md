@@ -109,18 +109,24 @@ A claim in a file past its `evidence.review` date carries no flag and is still s
 
 ## Upgrading from 0.1.7
 
-Run this once after upgrading, from the root of each knowledge-base clone. `<plugin-root>` is the 0.1.8
-plugin's directory, the one whose `.claude-plugin/plugin.json` reads `0.1.8`; an older version's directory
+Run this once after upgrading, from the root of each knowledge-base clone. `<plugin-root>` is the
+plugin's directory whose `.claude-plugin/plugin.json` reads `0.1.8` or later; an older version's directory
 can still sit beside it, and its tools do none of this. `kb/` is the default `kb_path`: if your
-`.kb-lint.yml` sets another, use that directory in both commands.
+`.kb-lint.yml` sets another, use that directory in both commands. First check that nothing there is
+uncommitted, so the fix writes only into files that hold committed claims and nothing else:
 
 ```
 git status --porcelain -- kb/
+```
+
+If it prints anything, do not run the fix: commit your own changes first, and have anyone else's committed
+or set aside. When it prints nothing, run:
+
+```
 python -E -B <plugin-root>/tools/kb_lint.py fix kb/
 ```
 
-The first command must print nothing, so the fix writes only into files that hold committed claims and
-nothing else. Then review and commit every file the fix prints after `wrote:`. If the fix exits 1, it has
+Then review and commit every file the fix prints after `wrote:`. If the fix exits 1, it has
 still made its other repairs: commit the files it printed, correct by hand each claim it names as gating
 (the refused shapes below say how), commit those edits, and run it again. Repeat until it exits 0.
 
